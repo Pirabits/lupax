@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Settings · LupaX</title>
+  <link rel="stylesheet" href="styles/ui.css" />
+  <style>
+    .page-body { max-width: 760px; }
+    .group { padding: 6px 18px; margin-bottom: 18px; }
+    .group h2 { font-size: 15px; font-weight: 800; margin: 12px 0 4px; display: flex; gap: 10px; align-items: center; }
+    .row { display: flex; align-items: center; gap: 14px; min-height: 56px; border-bottom: 1px solid var(--line); }
+    .row:last-child { border-bottom: 0; }
+    .row .lbl { flex: 1; }
+    .row .lbl b { display: block; font-size: 13.5px; font-weight: 700; }
+    .row .lbl span { display: block; font-size: 12px; color: var(--muted); }
+    .saved { position: fixed; right: 24px; bottom: 24px; }
+  </style>
+</head>
+<body class="page-shell">
+  <header class="page-top">
+    <a class="brand" href="#"><i data-logo="30"></i><b style="font-size:19px">LupaX</b></a>
+    <span class="spacer"></span>
+    <a class="btn" href="history.html"><i data-icon="list"></i>All captures</a>
+  </header>
+  <div class="page-body">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">Defaults for captures and recordings. Changes save automatically.</p>
+    <div id="root"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script type="module" src="settings.js"></script>
+</body>
+</html>

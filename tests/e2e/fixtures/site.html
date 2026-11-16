@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Product Studio</title>
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#666666;background:#ffffff}
+nav{display:flex;gap:32px;padding:24px 48px;align-items:center;border-bottom:1px solid #E6E6E6}
+nav b{color:#0E0E0E;font-size:20px} nav a{color:#0E0E0E;text-decoration:none;font-size:15px}
+.hero{padding:60px 48px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
+h1.hero-title{font:700 64px/72px Georgia,serif;color:#0E0E0E;margin:0 0 24px} h1 span{color:#7241FF}
+h2{font:700 36px/44px Georgia,serif;color:#0E0E0E} h3{font:600 20px/28px Arial;color:#0E0E0E}
+p{font-size:18px;line-height:28px;margin:0 0 16px} .muted{color:#FB3AA2;font-size:11px}
+.btn{display:inline-block;padding:14px 28px;border-radius:12px;background:#7241FF;color:#FFFFFF;font-weight:600;text-decoration:none;box-shadow:0 8px 24px rgba(114,65,255,.3)}
+.btn.ghost{background:#FFFFFF;color:#0E0E0E;border:1px solid #E6E6E6;box-shadow:none}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding:24px 48px}
+.card{padding:24px;border-radius:16px;border:1px solid #E6E6E6;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.06)}
+.card img{width:100%;height:120px;object-fit:cover;border-radius:10px}
+input{padding:10px 14px;border:1px solid #E6E6E6;border-radius:10px;height:44px;font-size:15px}
+.light{color:#BBBBBB;background:#FFFFFF}
+</style></head><body>
+<nav><b>Product Studio</b><a href="#">Products</a><a href="#">Resources</a><a href="#">Pricing</a></nav>
+<section class="hero"><div><h1 class="hero-title">Design, build, and ship <span>faster.</span></h1>
+<p>A modern platform for product teams to create, iterate, and launch beautiful experiences.</p>
+<a class="btn" href="#">Get Started</a> <a class="btn ghost" href="#">See Demo</a>
+<p class="light">Trusted by 2,000+ teams worldwide with tiny low contrast text</p>
+<input placeholder="Enter your email"></div>
+<div><svg width="300" height="220" viewBox="0 0 300 220"><rect width="300" height="220" rx="20" fill="#EDE5FF"/><circle cx="220" cy="60" r="24" fill="#FFC27A"/><path d="M20 200 120 90 200 200Z" fill="#7241FF"/></svg></div></section>
+<section class="cards">
+<div class="card"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='240'><defs><linearGradient id='g'><stop offset='0' stop-color='%23FB3AA2'/><stop offset='1' stop-color='%237241FF'/></linearGradient></defs><rect width='400' height='240' fill='url(%23g)'/></svg>"><h3>Fast</h3><p>Ship in days, not weeks.</p></div>
+<div class="card"><img alt="Mountains" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='240'><rect width='400' height='240' fill='%23B9A0FF'/><path d='M0 240 140 90 260 240Z' fill='%232E1A6B'/></svg>"><h3>Flexible</h3><p>Fits your workflow.</p></div>
+<div class="card"><h3>Collaborative</h3><p>Work together in real time.</p><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#7241FF" stroke-width="2"/></svg></div>
+</section>
+<section style="height:1400px;background:linear-gradient(#ffffff,#EDE5FF)"></section>
+<section style="padding:24px 48px"><h2>Features</h2><img src="/logo.svg" alt="Logo" width="48" height="48"><p>Everything you need.</p><button>Learn more</button></section>
+</body></html>

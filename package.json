@@ -1,0 +1,13 @@
+{
+  "name": "lupax",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LupaX Chrome extension — tests and tooling only; the extension itself has no build step or dependencies.",
+  "scripts": {
+    "test": "node --test tests/unit/",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test:all": "npm test && npm run test:e2e"
+  },
+  "engines": { "node": ">=22" }
+}

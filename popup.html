@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>LupaX</title>
+  <link rel="stylesheet" href="styles/ui.css" />
+  <link rel="stylesheet" href="styles/popup.css" />
+</head>
+<body>
+  <div id="app" class="wash">
+    <header class="hdr">
+      <button class="icon-btn sm back" id="back" title="Back" hidden><i data-icon="chevLeft"></i></button>
+      <button class="brand" id="home" title="Home"><i data-logo="34"></i><b>LupaX</b></button>
+      <span class="spacer"></span>
+      <button class="pill-btn" id="quick"><i data-icon="bolt" class="bolt"></i>Quick Mode<i data-icon="chevDown" class="chev"></i></button>
+      <div class="pill-btn inspect-pill" id="inspectPill" hidden>
+        <label class="switch"><input type="checkbox" id="inspectToggle" /><span></span></label>
+        <span>Inspect Mode</span>
+        <button class="icon-btn sm" id="inspectMenu" title="More"><i data-icon="chevDown" class="chev"></i></button>
+      </div>
+      <button class="icon-btn" id="settings" title="Settings"><i data-icon="gear"></i></button>
+      <button class="icon-btn" id="help" title="Help"><i data-icon="help"></i></button>
+    </header>
+    <main id="view"></main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

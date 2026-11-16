@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Captures · LupaX</title>
+  <link rel="stylesheet" href="styles/ui.css" />
+  <style>
+    .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+    .bar .spacer { flex: 1; }
+    .search { position: relative; }
+    .search .ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--muted); }
+    .search input { padding-left: 34px; width: 240px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+    .item { padding: 8px; border-radius: 16px; }
+    .item .th { position: relative; height: 150px; border-radius: 11px; overflow: hidden; background: #f3f0f9; display: grid; place-items: center; cursor: pointer; color: var(--muted-2); }
+    .item .th img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+    .item .th .ico { width: 34px; height: 34px; }
+    .item .th .badge { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,.95); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+    .item .th .play { position: absolute; inset: 0; display: grid; place-items: center; }
+    .item .th .play span { width: 46px; height: 46px; border-radius: 50%; background: rgba(23,18,43,.65); color: #fff; display: grid; place-items: center; }
+    .item .th .play .ico { width: 20px; height: 20px; }
+    .item .meta { display: flex; align-items: center; gap: 6px; padding: 10px 4px 2px; }
+    .item .meta div { flex: 1; min-width: 0; }
+    .item .meta b { display: block; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .meta span { font-size: 11.5px; color: var(--muted); }
+  </style>
+</head>
+<body class="page-shell">
+  <header class="page-top">
+    <a class="brand" href="#"><i data-logo="30"></i><b style="font-size:19px">LupaX</b></a>
+    <span class="spacer"></span>
+    <a class="btn" href="settings.html"><i data-icon="gear"></i>Settings</a>
+  </header>
+  <div class="page-body">
+    <h1 class="page-title">Your captures</h1>
+    <p class="page-sub">Screenshots, recordings and exports saved by LupaX on this device (latest 60).</p>
+    <div class="bar">
+      <div class="chips" id="filters"></div>
+      <span class="spacer"></span>
+      <label class="search"><i data-icon="search"></i><input class="input" id="q" placeholder="Search by name or page…" /></label>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script type="module" src="history.js"></script>
+</body>
+</html>

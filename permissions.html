@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Permissions · LupaX</title>
+  <link rel="stylesheet" href="styles/ui.css" />
+  <style>
+    .wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    .box { max-width: 460px; padding: 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .box .tile { width: 64px; height: 64px; border-radius: 18px; }
+    .box .tile .ico { width: 32px; height: 32px; }
+    h1 { margin: 6px 0 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+    p { margin: 0; color: var(--muted); }
+    .ok { color: var(--green); font-weight: 700; }
+  </style>
+</head>
+<body class="page-shell">
+  <div class="wrap">
+    <div class="card box">
+      <span class="tile"><i data-icon="mic"></i></span>
+      <h1>Allow microphone &amp; camera</h1>
+      <p id="desc">Tab recordings run in the background, where Chrome can’t ask for permission. Grant access once here and LupaX can include your voice and webcam bubble.</p>
+      <button class="cta" id="grant" style="margin-top:8px"><i data-icon="shield"></i>Grant access</button>
+      <p id="status"></p>
+    </div>
+  </div>
+  <script type="module" src="permissions.js"></script>
+</body>
+</html>

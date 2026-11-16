@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "LupaX",
+  "version": "1.0.0",
+  "description": "All-in-one web inspector: screenshots, screen recording, style inspection, asset extraction and accessibility checks.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage",
+    "unlimitedStorage",
+    "downloads",
+    "offscreen",
+    "tabCapture",
+    "desktopCapture",
+    "clipboardWrite"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LupaX",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png" }
+  },
+  "options_page": "settings.html",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "web_accessible_resources": [
+    { "resources": ["fonts/*"], "matches": ["<all_urls>"] }
+  ],
+  "commands": {
+    "capture-visible": { "suggested_key": { "default": "Alt+Shift+V" }, "description": "Capture visible area" },
+    "capture-area": { "suggested_key": { "default": "Alt+Shift+S" }, "description": "Capture selected region" },
+    "capture-full": { "suggested_key": { "default": "Alt+Shift+F" }, "description": "Capture full page" },
+    "toggle-recording": { "suggested_key": { "default": "Alt+Shift+R" }, "description": "Start / stop recording" }
+  }
+}
