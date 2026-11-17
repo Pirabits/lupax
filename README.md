@@ -33,7 +33,7 @@ Requires Chrome 116+.
 - Scroll-and-stitch uses window scrolling; inner scroll containers capture one viewport.
 - Cursor highlight is drawn in the page, so it shows in tab recordings and in screen recordings only over the browser tab.
 - Recordings are WebM. They are written to IndexedDB in 1-second chunks while recording, so long recordings don't live in memory; if the browser crashes mid-recording, the chunks are recovered into history as `…-recovered.webm` on the next start.
-- History keeps the latest 60 screenshots/exports and 20 recordings (`HISTORY_LIMITS` in `lib/db.js`). Captures still open in the editor are never removed. Downloaded files are not affected.
+- History keeps the latest 60 screenshots/exports and 20 recordings (`HISTORY_LIMITS` in `lib/db.js`). Captures waiting for Save in the editor are kept for 24 hours (`PENDING_TTL_MS`), then count toward the limit like any other capture. Downloaded files are not affected.
 - Auto copy to clipboard is skipped for images over 20 MB (the toast says so).
 - Errors appear as a toast in the page, with the toolbar badge (`!`) and tooltip as a fallback on pages Chrome won't let extensions script.
 
@@ -43,12 +43,12 @@ No build step and no runtime dependencies; the extension loads straight from thi
 
 ```sh
 npm test            # unit tests (node:test) — zip, pdf, color, format, settings, history limits, tokens, WCAG parity
-npm run test:e2e    # end-to-end: real Chrome + this extension + tests/e2e/fixtures/site.html  (~30 s, headless)
+npm run test:e2e    # end-to-end: real Chrome + this extension + tests/e2e/fixtures/site.html  (~50 s, headless)
 npm run test:e2e -- --headed        # watch it run
 npm run test:e2e -- --only record   # run tests whose name contains "record"
 ```
 
-The e2e harness (`tests/e2e/`) loads the extension with the DevTools `Extensions.loadUnpacked` command over `--remote-debugging-pipe` (branded Chrome ignores `--load-extension`) and passes `--allowlisted-extension-id` so tab recording works without a toolbar click. It covers capture modes and formats, downloads, area/element selection, inspect mode, color picker, the editor, tab recording, recording failure cleanup, crash recovery, history limits and ZIP export. Set `CHROME_PATH` if Chrome isn't in the default location, and `EXTENSION_DIR` to run the suite against another copy of the extension.
+The e2e harness (`tests/e2e/`) loads the extension with the DevTools `Extensions.loadUnpacked` command over `--remote-debugging-pipe` (branded Chrome ignores `--load-extension`) and passes `--allowlisted-extension-id` so tab recording works without a toolbar click. It covers capture modes and formats, downloads, area/element selection, inspect mode, color picker, the editor, tab recording, recording failure cleanup, stopping a recording at the first failed chunk write, one-recording-at-a-time during setup, crash recovery, history limits, ZIP export (including a hanging asset), popup escaping of page-controlled CSS and the accessibility score. Set `CHROME_PATH` if Chrome isn't in the default location, and `EXTENSION_DIR` to run the suite against another copy of the extension.
 
 Not covered automatically: window/desktop recording and desktop screenshots (they need a choice in Chrome's screen picker), and mic/webcam capture.
 

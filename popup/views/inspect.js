@@ -144,9 +144,11 @@ function renderInspect(d) {
 
   const maxSp = Math.max(1, ...d.spacing.scale.map((s) => s.count));
   const comps = d.components;
-  const btnPrev = (b) => `<span class="prev" style="background:${b.bg};color:${b.color};border:${b.border};border-radius:${b.radius};padding:${b.padding};font-size:${Math.min(parseFloat(b.fontSize), 15)}px;font-weight:${b.fontWeight};font-family:${esc(b.fontFamily)};box-shadow:${b.shadow};max-height:52px">${esc(b.label)}</span>`;
+  // every value here comes from the scanned page (computed styles can carry quotes, e.g. data: URLs in gradients), so escape all of it
+  const btnPrev = (b) => `<span class="prev" style="background:${esc(b.bg)};color:${esc(b.color)};border:${esc(b.border)};border-radius:${esc(b.radius)};padding:${esc(b.padding)};font-size:${Math.min(parseFloat(b.fontSize), 15)}px;font-weight:${esc(b.fontWeight)};font-family:${esc(b.fontFamily)};box-shadow:${esc(b.shadow)};max-height:52px">${esc(b.label)}</span>`;
 
   $('#insBody').innerHTML = `
+    ${d.truncated ? '<p class="muted" style="margin:10px 0 0;font-size:12px">Large page: only the first 9,000 elements were scanned, so these results are partial.</p>' : ''}
     <section class="ins-sec" id="sec-colors">
       <div class="h-sec"><h3>Color Palette</h3><span class="count-pill">${colors.length}</span><span class="spacer"></span>
         <button class="btn sm" data-act="pick">${icon('eyedropper')}Pick</button>
@@ -194,9 +196,9 @@ function renderInspect(d) {
     <section class="ins-sec" id="sec-components">
       <div class="h-sec"><h3>Components</h3><span class="count-pill">${comps.buttons.length + comps.inputs.length + comps.cards.length + comps.links.length}</span></div>
       ${comps.buttons.length ? `<div class="sub-h">${icon('button')}Buttons</div><div class="comp-grid">${comps.buttons.map((b, i) => `<div class="comp" data-comp="buttons:${i}" title="Click to copy CSS">${btnPrev(b)}<small>${b.count}× · ${esc(b.selector.slice(0, 30))}</small></div>`).join('')}</div>` : ''}
-      ${comps.inputs.length ? `<div class="sub-h">${icon('input')}Inputs</div><div class="comp-grid">${comps.inputs.map((x, i) => `<div class="comp" data-comp="inputs:${i}"><span class="prev" style="background:${x.bg};color:${x.color};border:${x.border};border-radius:${x.radius};height:${Math.min(parseFloat(x.height), 44)}px;padding:0 12px;min-width:160px;justify-content:flex-start;font-size:${Math.min(parseFloat(x.fontSize), 14)}px;opacity:.85">${esc(x.placeholder)}</span><small>${x.count}× · h ${x.height}</small></div>`).join('')}</div>` : ''}
-      ${comps.cards.length ? `<div class="sub-h">${icon('card')}Cards &amp; surfaces</div><div class="comp-grid">${comps.cards.map((x, i) => `<div class="comp" data-comp="cards:${i}"><span class="prev" style="width:110px;height:60px;background:${x.bg === 'transparent' ? '#fff' : x.bg};border:${x.border};border-radius:${Math.min(parseFloat(x.radius), 24)}px;box-shadow:${x.shadow}"></span><small>${x.count}× · r ${x.radius}</small></div>`).join('')}</div>` : ''}
-      ${comps.links.length ? `<div class="sub-h">${icon('link')}Links</div><div class="comp-grid">${comps.links.map((x, i) => `<div class="comp" data-comp="links:${i}"><span class="prev" style="color:${x.color};text-decoration:${x.decoration};font-weight:${x.fontWeight};font-family:${esc(x.fontFamily)};font-size:13px">${esc(x.label)}</span><small>${x.count}×</small></div>`).join('')}</div>` : ''}
+      ${comps.inputs.length ? `<div class="sub-h">${icon('input')}Inputs</div><div class="comp-grid">${comps.inputs.map((x, i) => `<div class="comp" data-comp="inputs:${i}"><span class="prev" style="background:${esc(x.bg)};color:${esc(x.color)};border:${esc(x.border)};border-radius:${esc(x.radius)};height:${Math.min(parseFloat(x.height), 44)}px;padding:0 12px;min-width:160px;justify-content:flex-start;font-size:${Math.min(parseFloat(x.fontSize), 14)}px;opacity:.85">${esc(x.placeholder)}</span><small>${x.count}× · h ${esc(x.height)}</small></div>`).join('')}</div>` : ''}
+      ${comps.cards.length ? `<div class="sub-h">${icon('card')}Cards &amp; surfaces</div><div class="comp-grid">${comps.cards.map((x, i) => `<div class="comp" data-comp="cards:${i}"><span class="prev" style="width:110px;height:60px;background:${x.bg === 'transparent' ? '#fff' : esc(x.bg)};border:${esc(x.border)};border-radius:${Math.min(parseFloat(x.radius), 24)}px;box-shadow:${esc(x.shadow)}"></span><small>${x.count}× · r ${esc(x.radius)}</small></div>`).join('')}</div>` : ''}
+      ${comps.links.length ? `<div class="sub-h">${icon('link')}Links</div><div class="comp-grid">${comps.links.map((x, i) => `<div class="comp" data-comp="links:${i}"><span class="prev" style="color:${esc(x.color)};text-decoration:${esc(x.decoration)};font-weight:${esc(x.fontWeight)};font-family:${esc(x.fontFamily)};font-size:13px">${esc(x.label)}</span><small>${x.count}×</small></div>`).join('')}</div>` : ''}
       ${!comps.buttons.length && !comps.inputs.length && !comps.cards.length && !comps.links.length ? '<div class="empty">No reusable components detected.</div>' : ''}
     </section>`;
   hydrateIcons($('#insBody'));

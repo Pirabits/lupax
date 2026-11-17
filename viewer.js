@@ -1,7 +1,8 @@
 import { icon, hydrateIcons } from './lib/icons.js';
 import { getItem, updateItem, deleteItem } from './lib/db.js';
 import { getSettings } from './lib/settings.js';
-import { bytes, esc, blobToDataUrl } from './lib/format.js';
+import { bytes, esc } from './lib/format.js';
+import { thumbnail } from './lib/thumb.js';
 import { imageBlobToPdf } from './lib/pdf.js';
 
 hydrateIcons();
@@ -11,13 +12,17 @@ const id = new URLSearchParams(location.search).get('id');
 let item = id ? await getItem(id) : null;
 const S = (await getSettings()).capture;
 
-function toast(text, ico = 'checkCircle') {
+function toast(text, ico = 'checkCircle', ms = 1800) {
   const t = $('#toast');
   t.innerHTML = `${icon(ico)}<span>${esc(text)}</span>`;
   t.classList.add('show');
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => t.classList.remove('show'), 1800);
+  toast.t = setTimeout(() => t.classList.remove('show'), ms);
 }
+
+// set by the service worker when a recording was cut short (see stoppedEarlyNotice in lib/record-sink.js)
+const notice = new URLSearchParams(location.search).get('notice');
+if (notice) toast(notice, 'alert', 10_000);
 
 async function download(blob, name, saveAs = false) {
   const url = URL.createObjectURL(blob);
@@ -350,15 +355,6 @@ async function imageEditor() {
     x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0);
     return c.convertToBlob({ type: 'image/jpeg', quality: S.jpgQuality });
   }
-  async function thumbOf(png) {
-    const bmp = await createImageBitmap(png);
-    const c = new OffscreenCanvas(360, 225);
-    const x = c.getContext('2d');
-    x.fillStyle = '#fff'; x.fillRect(0, 0, 360, 225);
-    const k = Math.max(360 / bmp.width, 225 / bmp.height);
-    x.drawImage(bmp, (360 - bmp.width * k) / 2, 0, bmp.width * k, bmp.height * k);
-    return blobToDataUrl(await c.convertToBlob({ type: 'image/jpeg', quality: 0.8 }));
-  }
 
   let fmt = item.pending ? S.fileType : item.format === 'pdf' ? 'pdf' : item.format === 'jpg' ? 'jpg' : 'png';
   const seg = document.createElement('div');
@@ -379,7 +375,8 @@ async function imageEditor() {
       const png = await exportPng();
       const blob = await convert(png, fmt);
       const name = (item.name || 'capture').replace(/\.[a-z0-9]+$/i, '') + '.' + fmt;
-      item = await updateItem(id, { blob, format: fmt, name, preview: fmt === 'png' ? undefined : png, thumb: await thumbOf(png), pending: false });
+      // the first save keeps the unannotated capture so "Download original" still has it after reopening
+      item = await updateItem(id, { blob, format: fmt, name, preview: fmt === 'png' ? undefined : png, thumb: await thumbnail(await createImageBitmap(png)), pending: false, original: item.original ?? src });
       $('#title').textContent = name;
       $('#banner').innerHTML = '';
       if (S.copy) await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).catch(() => {});
@@ -397,11 +394,12 @@ async function imageEditor() {
     Object.assign(m.style, { top: r.bottom + 6 + 'px', left: Math.min(r.right - m.offsetWidth, innerWidth - m.offsetWidth - 8) + 'px' });
     const close = (e) => { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', close, true); } };
     setTimeout(() => document.addEventListener('mousedown', close, true));
-    m.onclick = async (e) => {
+    m.onclick = (e) => act(e).catch((err) => toast(err.message, 'xCircle'));
+    const act = async (e) => {
       const a = e.target.closest('button')?.dataset.a;
       m.remove();
       if (a === 'dl') { const png = await exportPng(); const blob = await convert(png, fmt); await download(blob, (item.name || 'capture').replace(/\.[a-z0-9]+$/i, '') + '.' + fmt, true); }
-      if (a === 'orig') await download(src, (item.name || 'capture').replace(/\.[a-z0-9]+$/i, '') + '-original.png');
+      if (a === 'orig') await download(item.original ?? src, (item.name || 'capture').replace(/\.[a-z0-9]+$/i, '') + '-original.png');
       if (a === 'del') { await deleteItem(id); window.close(); }
     };
   });

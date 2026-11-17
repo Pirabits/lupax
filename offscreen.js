@@ -1,10 +1,11 @@
 // Offscreen document: records the current tab (tabCapture stream id), optionally with mic + webcam bubble,
 // and hands out blob: URLs for downloads (the service worker can't create them).
 import { getItem } from './lib/db.js';
-import { pickMimeType, blobToDataUrl } from './lib/format.js';
+import { pickMimeType } from './lib/format.js';
+import { thumbnail } from './lib/thumb.js';
 import { QUALITY } from './lib/settings.js';
 import { composeWithCamera } from './lib/compose.js';
-import { chunkSink } from './lib/record-sink.js';
+import { chunkSink, stoppedEarlyNotice } from './lib/record-sink.js';
 
 const BLOB_URL_TTL_MS = 120_000;
 let rec = null; // { recorder, sink, meta, thumb, release }
@@ -71,7 +72,7 @@ async function prepare({ streamId, options, meta }) {
     const tracks = [videoTrack];
     if (options.systemAudio || options.mic) tracks.push(...dest.stream.getAudioTracks());
     const recorder = new MediaRecorder(new MediaStream(tracks), { mimeType: pickMimeType(), videoBitsPerSecond: q.bps });
-    const sink = chunkSink(recorder, meta);
+    const sink = chunkSink(recorder, meta, { onError: stop });
     recorder.onstop = save;
     tabStream.getVideoTracks()[0].addEventListener('ended', stop);
     rec = { recorder, sink, meta, thumb: await grabThumb(tabStream.getVideoTracks()[0]), release };
@@ -83,11 +84,7 @@ async function prepare({ streamId, options, meta }) {
 
 async function grabThumb(track) {
   try {
-    const bmp = await new ImageCapture(track).grabFrame();
-    const c = new OffscreenCanvas(360, 225);
-    const k = Math.max(360 / bmp.width, 225 / bmp.height);
-    c.getContext('2d').drawImage(bmp, (360 - bmp.width * k) / 2, 0, bmp.width * k, bmp.height * k);
-    return await blobToDataUrl(await c.convertToBlob({ type: 'image/jpeg', quality: 0.8 }));
+    return await thumbnail(await new ImageCapture(track).grabFrame());
   } catch {
     return null;
   }
@@ -119,8 +116,8 @@ async function save() {
   rec = null;
   r.release();
   try {
-    const id = await r.sink.save({ kind: 'video', format: 'webm', name: `${r.meta.name || 'recording'}.webm`, thumb: r.thumb, title: r.meta.title, url: r.meta.url });
-    chrome.runtime.sendMessage({ type: 'recording-saved', id });
+    const { id, error } = await r.sink.save({ kind: 'video', format: 'webm', name: `${r.meta.name || 'recording'}.webm`, thumb: r.thumb, title: r.meta.title, url: r.meta.url });
+    chrome.runtime.sendMessage({ type: 'recording-saved', id, notice: stoppedEarlyNotice(error) });
   } catch (e) {
     chrome.runtime.sendMessage({ type: 'recording-failed', error: e?.message || String(e) });
   }
