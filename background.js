@@ -288,28 +288,48 @@ const getRecording = async () => (await chrome.storage.session.get('recording'))
 async function liveRecording() {
   const rec = await getRecording();
   if (!rec) return null;
-  const alive = rec.kind === 'tab'
-    ? (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length > 0
-    : await chrome.windows.get(rec.windowId).then(() => true, () => false);
+  const alive = rec.kind === 'tab' ? await tabRecorderAlive(rec) : await chrome.windows.get(rec.windowId).then(() => true, () => false);
   if (alive) return rec;
   await clearRecording();
   await recoverOrphanRecordings().catch(() => {});
   return null;
 }
+const TAB_START_TIMEOUT_MS = 60_000; // stream setup + the longest countdown, with a wide margin
+
+async function tabRecorderAlive(rec) {
+  if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length) return false;
+  // still setting up: the offscreen document has nothing to report yet (a worker that died mid-start times out)
+  if (rec.starting) return Date.now() - rec.startedAt < TAB_START_TIMEOUT_MS;
+  // the document also serves downloads and is recreated for them, so its existence alone proves nothing:
+  // after a crash mid-recording, a new download document would otherwise hold the slot until the browser restarts
+  const st = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'status' }).catch(() => null);
+  return !!st?.recording;
+}
+
+/** Check-and-reserve the recording slot one caller at a time: two starts (shortcut + popup) used to both pass the check. */
+let slotQueue = Promise.resolve();
+function reserveSlot(fn) {
+  const p = slotQueue.then(fn);
+  slotQueue = p.catch(() => {});
+  return p;
+}
+
 async function clearRecording() { await chrome.storage.session.remove('recording'); await setRecBadge(false); }
 async function setRecBadge(on) {
   await chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
   await chrome.action.setBadgeText({ text: on ? 'REC' : '' });
 }
 
+let offscreenCreating = null; // concurrent callers (a download during a recording start) share one createDocument
 async function ensureOffscreen() {
   const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
   if (ctx.length) return;
-  await chrome.offscreen.createDocument({
+  offscreenCreating ??= chrome.offscreen.createDocument({
     url: 'offscreen.html',
     reasons: ['USER_MEDIA', 'BLOBS'],
     justification: 'Record the current tab with MediaRecorder and create blob URLs for downloads',
-  });
+  }).finally(() => { offscreenCreating = null; });
+  await offscreenCreating;
 }
 
 /** Close the offscreen document unless it is recording or still serving a download URL. */
@@ -324,12 +344,13 @@ async function closeOffscreenIfIdle() {
 /** tab: the tab to record; defaults to the active tab, looked up only after the recording slot is known to be free. */
 async function startRecording(options, tab) {
   if (options.source !== 'tab') return openRecorderWindow('video', options.source);
-  if (await liveRecording()) throw new Error('A recording is already in progress');
-  tab ??= await activeTab();
-
-  await ensureOffscreen();
-  // reserve the slot now: setup and countdown take seconds, and nothing else may start a recording meanwhile
-  await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
+  await reserveSlot(async () => {
+    if (await liveRecording()) throw new Error('A recording is already in progress');
+    tab ??= await activeTab();
+    await ensureOffscreen();
+    // reserve the slot now: setup and countdown take seconds, and nothing else may start a recording meanwhile
+    await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
+  });
   try {
     // stream id must be requested while the user gesture is still fresh
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
@@ -386,16 +407,23 @@ async function endRecordingFx() {
 }
 
 async function openRecorderWindow(mode, source = 'desktop') {
-  if (mode === 'video' && (await liveRecording())) throw new Error('A recording is already in progress');
+  if (mode !== 'video') return openRecorderPopup(mode, source);
+  await reserveSlot(async () => {
+    if (await liveRecording()) throw new Error('A recording is already in progress');
+    const created = await openRecorderPopup(mode, source);
+    // the picker and countdown take a while; hold the slot for this window so no other recording starts meanwhile
+    await chrome.storage.session.set({ recording: { kind: 'desktop', source, windowId: created.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
+  });
+}
+
+async function openRecorderPopup(mode, source) {
   const win = await chrome.windows.getLastFocused().catch(() => null);
   const w = 400, h = 340;
-  const created = await chrome.windows.create({
+  return chrome.windows.create({
     url: chrome.runtime.getURL(`recorder.html?mode=${mode}&source=${source}`),
     type: 'popup', width: w, height: h, focused: true,
     ...(win ? { left: Math.round(win.left + (win.width - w) / 2), top: Math.round(win.top + 80) } : {}),
   });
-  // the picker and countdown take a while; hold the slot for this window so no other recording starts meanwhile
-  if (mode === 'video') await chrome.storage.session.set({ recording: { kind: 'desktop', source, windowId: created.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
 }
 
 // ───────────────────────────── color picker & inspector ─────────────────────────────

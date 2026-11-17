@@ -162,6 +162,24 @@ test('history, settings and accessibility report pages render without exceptions
   }
 });
 
+test('report page survives a bad focus parameter and a scan that returns nothing', async () => {
+  await freshSite();
+  const tabId = await run(`return (await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }))[0].id`);
+  const p = await b.open(b.url(`report.html?tab=${tabId}&focus=${encodeURIComponent('x"] b, [y')}`));
+  try {
+    await waitFor(() => p.evaluate(`!!document.querySelector('.donut b')`), { label: 'report rendered', ms: 8000 });
+    assert.deepEqual(p.exceptions(), [], 'a focus value that is not a valid selector does not throw');
+    // the injected scan comes back without a result (frame navigated or crashed mid-scan)
+    await p.evaluate(`chrome.scripting.executeScript = async () => [{}]; document.getElementById('rescan').click(); true`);
+    const msg = await waitFor(() => p.evaluate(`document.querySelector('#root h2')?.textContent === 'Can’t scan this tab' && document.querySelector('#root p').textContent`), { label: 'error card' });
+    assert.match(msg, /Rescan/);
+    assert.deepEqual(p.exceptions(), []);
+  } finally {
+    await p.detach();
+    await b.send('Target.closeTarget', { targetId: p.targetId });
+  }
+});
+
 test('accessibility score weighs every check by how many elements it analyzed', async () => {
   await freshSite();
   const r = await run(`const { scanA11y } = await import('./lib/scan.js');
@@ -172,6 +190,9 @@ test('accessibility score weighs every check by how many elements it analyzed', 
   assert.equal(r.passed, sum(null, 'passed'));
   assert.equal(r.score, Math.round((r.passed / (r.passed + sum('issue', 'failed') + sum('warning', 'failed') * 0.5)) * 100));
   assert.equal(r.truncated, false);
+  const byId = (id) => r.checks.find((c) => c.id === id);
+  assert.equal(byId('labels').summary, '1 form field has no accessible label');
+  assert.deepEqual(byId('alt').items.map((i) => i.detail), ['inline SVG image'], 'a data: image is named, not split on "/"');
 });
 
 test('scans handle oklch()/lab() colors and elements with numeric values', async () => {
@@ -351,6 +372,54 @@ test('editor saves annotations back to history', async () => {
   await ed.detach();
 });
 
+test('editor: crop is clamped, unsaved edits warn, IME Enter, and Save survives a deleted item', async () => {
+  await setSettings({ capture: { ...quietCapture, annotate: true } });
+  await freshSite();
+  const prev = (await lastItem())?.id;
+  await send({ type: 'capture', mode: 'visible' });
+  const it = await newItem(prev);
+  const ed = await b.attach((await b.waitForTarget((x) => x.url.includes(`viewer.html?id=${it.id}`))).targetId);
+  try {
+    await sleep(1200);
+    const r = await ed.evaluate(`(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()`);
+    const unloadBlocked = () => ed.evaluate(`(() => { const e = new Event('beforeunload', { cancelable: true }); dispatchEvent(e); return e.defaultPrevented; })()`);
+    assert.equal(await unloadBlocked(), false, 'no warning before any edit');
+
+    // IME: Enter while composing must not commit the text box
+    await ed.evaluate(`document.querySelector('[data-tool=text]').click()`);
+    await ed.click(r.x + r.w * 0.1, r.y + r.h * 0.1);
+    await waitFor(() => ed.evaluate(`!!document.querySelector('.txt-in')`), { label: 'text box' });
+    await ed.evaluate(`(() => { const el = document.querySelector('.txt-in'); el.textContent = 'にほん';
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true })); })()`);
+    assert.equal(await ed.evaluate(`!!document.querySelector('.txt-in')`), true, 'IME Enter kept the text box open');
+    await ed.evaluate(`document.querySelector('.txt-in').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+    assert.equal(await ed.evaluate(`!!document.querySelector('.txt-in')`), false, 'plain Enter commits');
+    assert.equal(await unloadBlocked(), true, 'unsaved annotation warns before closing');
+
+    // crop dragged past the right edge of the image
+    await ed.evaluate(`document.querySelector('[data-tool=crop]').click()`);
+    await ed.drag(r.x + r.w * 0.6, r.y + r.h * 0.4, r.x + r.w + 15, r.y + r.h * 0.7);
+
+    // the item disappears while open (History delete / Clear history), then Save twice
+    await db(`await db.deleteItem(${JSON.stringify(it.id)})`);
+    await setSettings({ capture: { ...quietCapture, annotate: true, destination: 'none', fileType: 'png' } });
+    for (let i = 0; i < 2; i++) {
+      await ed.evaluate(`document.getElementById('saveBtn').click()`);
+      await waitFor(() => ed.evaluate(`!document.getElementById('saveBtn').disabled`), { label: 'save finished' });
+      await sleep(300);
+    }
+    const saved = await waitFor(() => db(`const x = await db.getItem(${JSON.stringify(it.id)}); if (!x) return null;
+      const bmp = await createImageBitmap(x.blob); return { w: bmp.width, h: bmp.height, pending: x.pending }`), { label: 'item restored by Save' });
+    assert.equal(saved.pending, false);
+    assert.ok(saved.w <= Math.ceil(it.width * 0.4) + 1 && saved.w >= Math.floor(it.width * 0.4) - 2, `crop clamped to the image: ${saved.w} of ${it.width}`);
+    assert.equal(await unloadBlocked(), false, 'no warning after saving');
+    assert.deepEqual(ed.exceptions(), []);
+    assert.equal(await ed.evaluate(`document.querySelector('.toast')?.textContent || ''`).then((t) => /Cannot read/.test(t)), false);
+  } finally {
+    await ed.detach();
+  }
+});
+
 test('tab recording saves a WebM and streams chunks to IndexedDB while recording', async () => {
   await setSettings({ record: { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 } });
   await freshSite();
@@ -367,6 +436,46 @@ test('tab recording saves a WebM and streams chunks to IndexedDB while recording
   assert.ok(it.size > 1000);
   assert.ok(chunksWhileRecording >= 2, `expected chunks persisted during recording, got ${chunksWhileRecording}`);
   assert.equal(await db(`return db.countChunks()`), 0, 'chunks cleaned up after save');
+});
+
+const recOpts = { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 };
+const offscreenRecording = () => run(`return (await chrome.runtime.sendMessage({ target: 'offscreen', type: 'status' }).catch(() => null))?.recording ?? null`);
+const sessionRecording = () => run(`return (await chrome.storage.session.get('recording')).recording ?? null`);
+
+test('two recording starts at once: the second is refused and the first keeps recording', async () => {
+  await freshSite();
+  await resetBadge();
+  const prev = (await lastItem())?.id;
+  // the offscreen document already exists (it also serves downloads): both starts get past setup and race
+  await run(`if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length)
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'download' });`);
+  // e.g. the record shortcut and the popup button at the same moment
+  await Promise.all([send({ type: 'record-start', options: recOpts }), send({ type: 'record-start', options: recOpts })]);
+  await waitFor(async () => { const r = await sessionRecording(); return r && !r.starting; }, { label: 'recording started', ms: 8000 });
+  await sleep(2500);
+  assert.equal(await offscreenRecording(), true, 'first recording still running');
+  await send({ type: 'record-stop' });
+  const it = await newItem(prev, { ms: 15000 });
+  assert.equal(it.kind, 'video');
+  assert.ok(!/recovered/.test(it.name), `saved normally, not recovered: ${it.name}`);
+});
+
+test('a crashed tab recorder does not block recording when the offscreen document is recreated', async () => {
+  await freshSite();
+  await resetBadge();
+  await send({ type: 'record-start', options: recOpts });
+  await waitFor(async () => { const r = await sessionRecording(); return r && !r.starting; }, { label: 'recording started', ms: 8000 });
+  // the recorder dies (renderer crash), then a download recreates the offscreen document
+  await run(`await chrome.offscreen.closeDocument();
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'download' });`);
+  assert.equal(await offscreenRecording(), false);
+  const prev = (await lastItem())?.id;
+  await send({ type: 'record-start', options: recOpts });
+  await waitFor(async () => (await offscreenRecording()) === true, { label: 'new recording started', ms: 8000 });
+  await sleep(2000);
+  await send({ type: 'record-stop' });
+  const it = await waitFor(async () => { const x = await lastItem(); return x && x.id !== prev && !/recovered/.test(x.name) ? x : null; }, { label: 'new recording saved', ms: 15000 });
+  assert.equal(it.kind, 'video');
 });
 
 test('stopping during the countdown cancels the tab recording quietly', async () => {

@@ -10,6 +10,7 @@ import { chunkSink, stoppedEarlyNotice } from './lib/record-sink.js';
 const BLOB_URL_TTL_MS = 120_000;
 const CANCELLED = 'Recording cancelled'; // matched in background.js: a stop during the countdown is not an error
 let rec = null; // { recorder, sink, meta, thumb, release }
+let saving = 0; // recordings stopped but still being written to history
 const blobUrls = new Set();
 
 chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
@@ -25,7 +26,7 @@ chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     case 'pause': rec?.recorder?.state === 'recording' && rec.recorder.pause(); sendResponse({ ok: true }); break;
     case 'resume': rec?.recorder?.state === 'paused' && rec.recorder.resume(); sendResponse({ ok: true }); break;
     case 'stop': stop(); sendResponse({ ok: true }); break;
-    case 'status': sendResponse({ ok: true, recording: !!rec, blobUrls: blobUrls.size }); break;
+    case 'status': sendResponse({ ok: true, recording: !!rec || saving > 0, blobUrls: blobUrls.size }); break;
     case 'blob-url': reply(blobUrl(msg.id)); return true;
   }
 });
@@ -119,12 +120,15 @@ async function save() {
   const r = rec;
   if (!r) return;
   rec = null;
+  saving++;
   r.release();
   try {
     const { id, error } = await r.sink.save({ kind: 'video', format: 'webm', name: `${r.meta.name || 'recording'}.webm`, thumb: r.thumb, title: r.meta.title, url: r.meta.url });
     chrome.runtime.sendMessage({ type: 'recording-saved', id, notice: stoppedEarlyNotice(error) });
   } catch (e) {
     chrome.runtime.sendMessage({ type: 'recording-failed', error: e?.message || String(e) });
+  } finally {
+    saving--;
   }
 }
 
