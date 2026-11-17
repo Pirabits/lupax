@@ -41,10 +41,16 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
 // Chunks left by a recording that never finished (browser crash, closed offscreen document) become history items.
 chrome.runtime.onStartup.addListener(() => recoverOrphanRecordings().catch(reportError));
+// an update or reload ends any recording mid-way; its chunks would otherwise wait for the next browser launch
+chrome.runtime.onInstalled.addListener(() => recoverOrphanRecordings().catch(reportError));
 
 chrome.windows.onRemoved.addListener(async (windowId) => {
   const rec = await getRecording();
-  if (rec && rec.kind === 'desktop' && rec.windowId === windowId) await clearRecording();
+  if (!rec || rec.kind !== 'desktop' || rec.windowId !== windowId) return;
+  // the recorder window was closed (its beforeunload prompt only shows after user interaction): keep what it recorded
+  await clearRecording();
+  const [id] = await recoverOrphanRecordings().catch((e) => { reportError(e); return []; });
+  if (id) await openViewer(id, undefined, 'The recorder window was closed, so the recording stopped there. This is everything recorded until then.');
 });
 
 async function handle(msg) {
@@ -359,7 +365,7 @@ async function startRecording(options, tab) {
       target: 'offscreen', type: 'prepare', streamId, options,
       meta: { title: tab.title, url: tab.url, name: baseName(tab.title, tab.url) },
     });
-    if (!res?.ok) throw new Error(res?.error || 'Could not start recording');
+    if (!res?.ok) throw Object.assign(new Error(res?.error || 'Could not start recording'), { name: res?.errorName || 'Error', device: res?.device });
     if (options.countdown) await inject(tab.id, showCountdown, [options.countdown]).catch(() => sleep(options.countdown * 1000));
     if ((await getRecording())?.cancelled) throw new Error(RECORDING_CANCELLED);
     const go = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'begin' });
@@ -370,6 +376,13 @@ async function startRecording(options, tab) {
     await clearRecording();
     await closeOffscreenIfIdle();
     if (e?.message === RECORDING_CANCELLED) return; // stopped during setup or countdown: nothing to report
+    // the offscreen document can't show permission prompts; the popup sends people to the grant page first, but the
+    // record shortcut doesn't go through the popup
+    if (e?.device && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+      const need = [options.mic && 'microphone', options.webcam && 'camera'].filter(Boolean).join(',');
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`permissions.html?need=${need}`) });
+      return;
+    }
     throw e;
   }
   await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, startedAt: Date.now(), pausedTotal: 0 } });

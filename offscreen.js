@@ -17,7 +17,7 @@ chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
   if (msg?.target !== 'offscreen') return;
   const reply = (p) => p.then(
     (value) => sendResponse({ ok: true, ...value }),
-    (e) => sendResponse({ ok: false, error: e?.message || String(e) }),
+    (e) => sendResponse({ ok: false, error: e?.message || String(e), errorName: e?.name, device: e?.device }),
   );
   switch (msg.type) {
     case 'prepare': reply(prepare(msg)); return true;
@@ -58,14 +58,14 @@ async function prepare({ streamId, options, meta }) {
     if (options.systemAudio) tabAudio.connect(dest);
 
     if (options.mic) {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).catch((e) => { throw tagDevice(e, 'microphone'); });
       streams.push(mic);
       audioCtx.createMediaStreamSource(mic).connect(dest);
     }
 
     let videoTrack = tabStream.getVideoTracks()[0];
     if (options.webcam) {
-      const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: options.fps || 30 } });
+      const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: options.fps || 30 } }).catch((e) => { throw tagDevice(e, 'camera'); });
       streams.push(cam);
       composer = composeWithCamera(videoTrack, cam.getVideoTracks()[0], { position: options.webcamPosition });
       videoTrack = composer.track;
@@ -82,6 +82,12 @@ async function prepare({ streamId, options, meta }) {
     release();
     throw e;
   }
+}
+
+/** Mark which optional device failed, so the worker can tell a missing mic/camera grant from a tab capture failure. */
+function tagDevice(e, device) {
+  try { e.device = device; } catch {}
+  return e;
 }
 
 async function grabThumb(track) {

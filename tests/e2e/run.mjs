@@ -502,7 +502,7 @@ test('recording setup failure releases the tab, reports the error in the page, a
     await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'test' });`);
   const off = await b.attach((await b.waitForTarget((t) => t.url.endsWith('/offscreen.html'))).targetId);
   await off.evaluate(`(() => { const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia = (c) => c.video ? real(c) : Promise.reject(new DOMException('Mic blocked by test', 'NotAllowedError')); })()`);
+    navigator.mediaDevices.getUserMedia = (c) => c.video ? real(c) : Promise.reject(new DOMException('Mic in use by test', 'NotReadableError')); })()`);
   const opts = { source: 'tab', mic: true, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 };
   await send({ type: 'record-start', options: opts });
   await waitFor(async () => (await badge()).text === '!', { label: 'error badge' });
@@ -520,6 +520,25 @@ test('recording setup failure releases the tab, reports the error in the page, a
   await send({ type: 'record-stop' });
   const it = await newItem(prev, { ms: 15000 });
   assert.equal(it.kind, 'video');
+});
+
+test('record shortcut without a mic grant opens the grant page instead of failing', async () => {
+  await freshSite();
+  await resetBadge();
+  await run(`if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length)
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'test' });`);
+  const off = await b.attach((await b.waitForTarget((t) => t.url.endsWith('/offscreen.html'))).targetId);
+  await off.evaluate(`(() => { const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (c) => c.video ? real(c) : Promise.reject(new DOMException('Permission denied', 'NotAllowedError')); })()`);
+  // what the Alt+Shift+R handler does: start straight away, without the popup's permission check
+  await send({ type: 'record-start', options: { ...recOpts, mic: true } });
+  const t = await b.waitForTarget((x) => x.url.includes('permissions.html?need=microphone'), 8000);
+  await off.detach();
+  assert.equal((await badge()).text, '', 'no error badge: the grant page explains what to do');
+  assert.equal(await sessionRecording(), null, 'slot freed');
+  const captured = await run(`return (await chrome.tabCapture.getCapturedTabs()).filter((c) => c.status === 'active' || c.status === 'pending').length`);
+  assert.equal(captured, 0, 'tab released');
+  await b.send('Target.closeTarget', { targetId: t.targetId });
 });
 
 test('a failed chunk write stops the recording and saves the intact part before it', async () => {
@@ -594,6 +613,23 @@ test('orphaned recording chunks are recovered into history', async () => {
     const it = await db.getItem(ids[0]);
     return { n: ids.length, name: it.name, text: await it.blob.text(), left: await db.countChunks() };`);
   assert.deepEqual(res, { n: 1, name: 'crashed-tab-recovered.webm', text: 'abcdef', left: 0 });
+});
+
+test('closing the recorder window mid-recording keeps what was recorded', async () => {
+  await resetBadge();
+  // a window/desktop recording in progress (the screen picker can't be driven in tests, so set up its state directly)
+  const winId = await run(`const w = await chrome.windows.create({ url: 'about:blank', type: 'popup', width: 300, height: 200 });
+    await chrome.storage.session.set({ recording: { kind: 'desktop', source: 'desktop', windowId: w.id, startedAt: Date.now(), pausedTotal: 0 } });
+    return w.id;`);
+  await db(`await db.appendChunk('test-window', -1, null, { name: 'desktop-rec', title: 'Desktop', mimeType: 'video/webm' });
+    await db.appendChunk('test-window', 0, new Blob(['abc'], { type: 'video/webm' }));`);
+  await run(`await chrome.windows.remove(${winId})`);
+  const t = await b.waitForTarget((x) => x.url.includes('viewer.html') && x.url.includes('notice='), 5000);
+  const id = new URL(t.url).searchParams.get('id');
+  const it = await db(`const x = await db.getItem(${JSON.stringify(id)}); return { name: x.name, text: await x.blob.text() }`);
+  assert.deepEqual(it, { name: 'desktop-rec-recovered.webm', text: 'abc' });
+  assert.equal(await sessionRecording(), null, 'slot freed');
+  await b.send('Target.closeTarget', { targetId: t.targetId });
 });
 
 test('history keeps 60 screenshots/exports and 20 recordings, never pruning recent pending edits', async () => {
