@@ -4,7 +4,8 @@ import { putItem } from './lib/db.js';
 import { getSettings, QUALITY } from './lib/settings.js';
 import { pickMimeType, clock, stamp } from './lib/format.js';
 import { composeWithCamera } from './lib/compose.js';
-import { chunkSink } from './lib/record-sink.js';
+import { chunkSink, stoppedEarlyNotice } from './lib/record-sink.js';
+import { thumbnail } from './lib/thumb.js';
 
 hydrateIcons();
 const $ = (s) => document.querySelector(s);
@@ -106,15 +107,15 @@ async function record(streamId, opts) {
     throw e;
   }
   const name = `${source === 'window' ? 'window' : 'screen'}-recording-${stamp()}`;
-  const sink = chunkSink(recorder, { name, title: source === 'window' ? 'Window recording' : 'Screen recording' });
+  const sink = chunkSink(recorder, { name, title: source === 'window' ? 'Window recording' : 'Screen recording' }, { onError: () => stop() });
   recorder.onstop = async () => {
     clearInterval(timer);
     release();
     $('#stage').innerHTML = '<span class="spin"></span>';
     $('#controls').hidden = true;
     try {
-      const id = await sink.save({ kind: 'video', format: 'webm', name: `${name}.webm`, thumb });
-      await chrome.runtime.sendMessage({ type: 'recording-saved', id });
+      const { id, error } = await sink.save({ kind: 'video', format: 'webm', name: `${name}.webm`, thumb });
+      await chrome.runtime.sendMessage({ type: 'recording-saved', id, notice: stoppedEarlyNotice(error) });
       window.close();
     } catch (e) {
       chrome.runtime.sendMessage({ type: 'recording-failed', error: e.message });
@@ -124,20 +125,19 @@ async function record(streamId, opts) {
   screen.getVideoTracks()[0].addEventListener('ended', stop);
 
   let thumb = null;
-  try {
-    const bmp = await new ImageCapture(screen.getVideoTracks()[0]).grabFrame();
-    const c = new OffscreenCanvas(360, 225);
-    const k = Math.max(360 / bmp.width, 225 / bmp.height);
-    c.getContext('2d').drawImage(bmp, (360 - bmp.width * k) / 2, 0, bmp.width * k, bmp.height * k);
-    const b = await c.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
-    thumb = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
-  } catch {}
+  try { thumb = await thumbnail(await new ImageCapture(screen.getVideoTracks()[0]).grabFrame()); } catch {}
 
+  // claim the recording slot before starting; the service worker refuses if another recording owns it
+  const { id: windowId } = await chrome.windows.getCurrent();
+  const granted = await chrome.runtime.sendMessage({ type: 'recording-started', source, windowId }).catch((e) => ({ ok: false, error: e.message }));
+  if (!granted?.ok) {
+    release();
+    await sink.discard();
+    throw new Error(granted?.error || 'Could not start recording');
+  }
   recorder.start(1000);
   rec = recorder;
   t0 = Date.now();
-  const { id: windowId } = await chrome.windows.getCurrent();
-  await chrome.runtime.sendMessage({ type: 'recording-started', source, windowId });
   $('#controls').hidden = false;
   $('#stage').innerHTML = `<div><div class="time"><span class="dot" id="dot"></span><span id="time">00:00</span></div><p style="margin-top:8px">Recording · you can minimize this window</p></div>`;
   timer = setInterval(() => { $('#time').textContent = clock((pausedAt || Date.now()) - t0 - pausedTotal); }, 500);

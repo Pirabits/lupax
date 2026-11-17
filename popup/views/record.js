@@ -17,10 +17,10 @@ registerView('record', async ({ live }) => {
     <div class="card live">
       <span class="dot ${recording.paused ? 'paused' : ''}"></span>
       <div class="time" id="liveTime">00:00</div>
-      <div class="src-l">${recording.paused ? 'Paused' : 'Recording'} · ${{ tab: 'This tab', window: 'App window', desktop: 'Entire screen' }[recording.source] || 'Screen'}</div>
-      <div class="btns">
+      <div class="src-l">${recording.starting ? 'Starting' : recording.paused ? 'Paused' : 'Recording'} · ${{ tab: 'This tab', window: 'App window', desktop: 'Entire screen' }[recording.source] || 'Screen'}</div>
+      ${recording.starting ? '' : `<div class="btns">
         <button class="btn" id="pauseRec">${icon(recording.paused ? 'play' : 'pause')}${recording.paused ? 'Resume' : 'Pause'}</button>
-      </div>
+      </div>`}
     </div>` : '';
 
   view.innerHTML = `
@@ -80,9 +80,11 @@ registerView('record', async ({ live }) => {
       const now = recording.paused ? recording.pausedAt : Date.now();
       t.textContent = clock(now - recording.startedAt - (recording.pausedTotal || 0));
     };
-    tick();
-    liveTimer = setInterval(tick, 500);
-    $('#pauseRec').onclick = async () => { await send({ type: recording.paused ? 'record-resume' : 'record-pause' }); setTimeout(() => go('record', { push: false }), 150); };
+    if (!recording.starting) {
+      tick();
+      liveTimer = setInterval(tick, 500);
+    }
+    if ($('#pauseRec')) $('#pauseRec').onclick = async () => { await send({ type: recording.paused ? 'record-resume' : 'record-pause' }); setTimeout(() => go('record', { push: false }), 150); };
     $('#recGo').onclick = async () => { await send({ type: 'record-stop' }); window.close(); };
   } else {
     $('#recGo').onclick = () => startRecording({});

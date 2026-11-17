@@ -62,6 +62,7 @@ function renderAssets() {
       <span class="sum">${list.length} assets • ${bytes(totalSize)}</span>
       <button class="btn primary" id="zip" ${list.length ? '' : 'disabled'}>${icon('download')}Export ZIP</button>
     </div>
+    ${state.cache.assets.truncated ? '<p class="muted" style="margin:0 0 8px;font-size:12px">Large page: only the first 9,000 elements were scanned for background images, so some assets may be missing.</p>' : ''}
     <div class="agrid" id="agrid">${pageItems.map((a, i) => assetCard(a, i)).join('') || '<div class="empty" style="grid-column:1/-1">No assets in this category.</div>'}</div>
     <div class="pager">
       <button class="pg nav" data-pg="${aState.page - 1}" ${aState.page <= 1 ? 'disabled' : ''}>${icon('chevLeft')}</button>
@@ -172,6 +173,7 @@ function renderA11y() {
         <div class="stat y">${icon('alert')}<span>Warnings</span><b>${r.warnings}</b></div>
       </div>
     </div>
+    ${r.truncated ? '<p class="muted" style="margin:0 0 8px;font-size:12px">Large page: contrast and readability checked the first 9,000 elements only.</p>' : ''}
     ${failing.length ? failing.map((c) => `
       <button class="card hover issue ${c.severity === 'issue' ? 'issue-r' : 'issue-y'}" data-check="${c.id}">
         ${icon(c.severity === 'issue' ? 'xCircle' : 'alert')}

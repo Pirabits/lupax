@@ -3,6 +3,7 @@ import { getSettings } from './lib/settings.js';
 import { baseName, blobToDataUrl } from './lib/format.js';
 import { imageBlobToPdf } from './lib/pdf.js';
 import { makeZip, assetZipPath } from './lib/zip.js';
+import { thumbnail } from './lib/thumb.js';
 
 // Chrome limits captureVisibleTab to ~2 calls/second.
 const CAPTURE_GAP_MS = 550;
@@ -16,6 +17,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.target) return; // addressed to offscreen / recorder
+  if (msg?.type === 'recording-started') {
+    // the recorder window waits for this answer and only starts recording when the slot is granted
+    handle(msg, sender).then(() => sendResponse({ ok: true }), (e) => sendResponse({ ok: false, error: e?.message || String(e) }));
+    return true;
+  }
   sendResponse({ ok: true }); // ack first so the popup can close
   handle(msg, sender).catch(reportError);
 });
@@ -27,7 +33,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
     if (command === 'toggle-recording') {
       if (await liveRecording()) return await stopRecording();
       const s = await getSettings();
-      await startRecording({ ...s.record, source: 'tab' }, tab || (await activeTab()));
+      await startRecording({ ...s.record, source: 'tab' }, tab);
     }
   } catch (e) { reportError(e); }
 });
@@ -49,18 +55,22 @@ async function handle(msg) {
       if (item) await finishCapture(item.blob, null, { title: 'Desktop screenshot', name: 'desktop-screenshot' });
       return;
     }
-    case 'record-start': return startRecording(msg.options, await activeTab());
+    case 'record-start': return startRecording(msg.options);
     case 'record-stop': return stopRecording();
     case 'record-pause': return pauseRecording(true);
     case 'record-resume': return pauseRecording(false);
-    case 'recording-started':
+    case 'recording-started': {
+      // the slot was reserved for this recorder window when it opened; anything else means another recording owns it
+      const rec = await liveRecording();
+      if (rec && !(rec.kind === 'desktop' && rec.windowId === msg.windowId)) throw new Error('A recording is already in progress');
       await chrome.storage.session.set({ recording: { kind: 'desktop', source: msg.source, windowId: msg.windowId, startedAt: Date.now(), pausedTotal: 0 } });
       return setRecBadge(true);
+    }
     case 'recording-saved':
       await endRecordingFx();
       await clearRecording();
       await closeOffscreenIfIdle();
-      return openViewer(msg.id);
+      return openViewer(msg.id, undefined, msg.notice);
     case 'recording-failed':
       await endRecordingFx();
       await clearRecording();
@@ -184,7 +194,7 @@ async function finishCapture(png, tab, meta = {}) {
   const s = (await getSettings()).capture;
   const bmp = await createImageBitmap(png);
   const width = bmp.width, height = bmp.height;
-  const thumb = await makeThumb(bmp);
+  const thumb = await thumbnail(bmp);
   bmp.close();
   const base = meta.name || baseName(tab?.title, tab?.url);
   const common = { kind: 'image', title: meta.title || tab?.title, url: tab?.url, width, height, thumb };
@@ -217,17 +227,6 @@ async function downloadItem(id, filename, saveAs = false) {
   return chrome.downloads.download({ url: res.url, filename, saveAs, conflictAction: 'uniquify' });
 }
 
-async function makeThumb(bmp) {
-  const W = 360, H = 225;
-  const c = new OffscreenCanvas(W, H);
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, W, H);
-  const k = Math.max(W / bmp.width, H / bmp.height);
-  ctx.drawImage(bmp, (W - bmp.width * k) / 2, 0, bmp.width * k, bmp.height * k);
-  return blobToDataUrl(await c.convertToBlob({ type: 'image/jpeg', quality: 0.8 }));
-}
-
 async function toJpeg(png, quality = 0.92) {
   const bmp = await createImageBitmap(png);
   const c = new OffscreenCanvas(bmp.width, bmp.height);
@@ -250,8 +249,8 @@ async function copyImageInTab(tab, png) {
   }
 }
 
-async function openViewer(id, tab) {
-  const url = chrome.runtime.getURL(`viewer.html?id=${encodeURIComponent(id)}`);
+async function openViewer(id, tab, notice) {
+  const url = chrome.runtime.getURL(`viewer.html?id=${encodeURIComponent(id)}${notice ? `&notice=${encodeURIComponent(notice)}` : ''}`);
   if (tab) return chrome.tabs.create({ url, index: tab.index + 1, openerTabId: tab.id, windowId: tab.windowId });
   const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
   return chrome.tabs.create({ url, ...(win ? { windowId: win.id } : {}) });
@@ -307,11 +306,15 @@ async function closeOffscreenIfIdle() {
   await chrome.offscreen.closeDocument().catch(() => {});
 }
 
+/** tab: the tab to record; defaults to the active tab, looked up only after the recording slot is known to be free. */
 async function startRecording(options, tab) {
-  if (await liveRecording()) throw new Error('A recording is already in progress');
   if (options.source !== 'tab') return openRecorderWindow('video', options.source);
+  if (await liveRecording()) throw new Error('A recording is already in progress');
+  tab ??= await activeTab();
 
   await ensureOffscreen();
+  // reserve the slot now: setup and countdown take seconds, and nothing else may start a recording meanwhile
+  await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
   try {
     // stream id must be requested while the user gesture is still fresh
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
@@ -327,6 +330,7 @@ async function startRecording(options, tab) {
   } catch (e) {
     // release anything the offscreen document already acquired so the tab isn't left captured
     await chrome.runtime.sendMessage({ target: 'offscreen', type: 'reset' }).catch(() => {});
+    await clearRecording();
     await closeOffscreenIfIdle();
     throw e;
   }
@@ -338,12 +342,14 @@ async function startRecording(options, tab) {
 async function stopRecording() {
   const rec = await liveRecording();
   if (!rec) return;
+  // still in the screen picker or countdown: closing the recorder window cancels it (onRemoved frees the slot)
+  if (rec.starting && rec.kind === 'desktop') return chrome.windows.remove(rec.windowId).catch(() => {});
   await chrome.runtime.sendMessage({ target: rec.kind === 'tab' ? 'offscreen' : 'recorder', type: 'stop' }).catch(() => {});
 }
 
 async function pauseRecording(pause) {
   const rec = await getRecording();
-  if (!rec || !!rec.paused === pause) return;
+  if (!rec || rec.starting || !!rec.paused === pause) return;
   await chrome.runtime.sendMessage({ target: rec.kind === 'tab' ? 'offscreen' : 'recorder', type: pause ? 'pause' : 'resume' }).catch(() => {});
   const now = Date.now();
   const next = pause ? { ...rec, paused: true, pausedAt: now } : { ...rec, paused: false, pausedTotal: (rec.pausedTotal || 0) + (now - rec.pausedAt) };
@@ -360,11 +366,13 @@ async function openRecorderWindow(mode, source = 'desktop') {
   if (mode === 'video' && (await liveRecording())) throw new Error('A recording is already in progress');
   const win = await chrome.windows.getLastFocused().catch(() => null);
   const w = 400, h = 340;
-  await chrome.windows.create({
+  const created = await chrome.windows.create({
     url: chrome.runtime.getURL(`recorder.html?mode=${mode}&source=${source}`),
     type: 'popup', width: w, height: h, focused: true,
     ...(win ? { left: Math.round(win.left + (win.width - w) / 2), top: Math.round(win.top + 80) } : {}),
   });
+  // the picker and countdown take a while; hold the slot for this window so no other recording starts meanwhile
+  if (mode === 'video') await chrome.storage.session.set({ recording: { kind: 'desktop', source, windowId: created.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
 }
 
 // ───────────────────────────── color picker & inspector ─────────────────────────────
@@ -388,17 +396,27 @@ async function toggleInspect(tab, on) {
 
 // ───────────────────────────── asset ZIP ─────────────────────────────
 
+const ASSET_FETCH_TIMEOUT_MS = 10_000;
+const ASSET_FETCH_CONCURRENCY = 4;
+
 /** Runs here rather than in the popup so closing the popup doesn't lose the export. */
 async function exportAssetsZip({ assets, title, url }, tab) {
-  const files = [];
-  for (const [i, a] of assets.entries()) {
-    await setProgressBadge(i, assets.length);
-    try {
-      const res = await fetch(a.url);
-      if (!res.ok) continue;
-      files.push({ name: assetZipPath(a), data: new Uint8Array(await res.arrayBuffer()) });
-    } catch { /* unreachable asset: skip */ }
-  }
+  // a few fetches at a time, each with a timeout, so one slow or hanging asset can't stall the export
+  const results = new Array(assets.length);
+  let next = 0, fetched = 0;
+  await setProgressBadge(0, assets.length);
+  const worker = async () => {
+    while (next < assets.length) {
+      const i = next++;
+      try {
+        const res = await fetch(assets[i].url, { signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS) });
+        if (res.ok) results[i] = { name: assetZipPath(assets[i]), data: new Uint8Array(await res.arrayBuffer()) };
+      } catch { /* unreachable or timed out: skip */ }
+      await setProgressBadge(++fetched, assets.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(ASSET_FETCH_CONCURRENCY, assets.length) }, worker));
+  const files = results.filter(Boolean); // input order, so duplicate names are suffixed deterministically
   await chrome.action.setBadgeText({ text: '' });
   if (!files.length) throw new Error('Could not download any of the selected assets');
   const name = `${baseName(title, url)}-assets.zip`;

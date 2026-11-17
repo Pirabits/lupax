@@ -17,6 +17,7 @@ const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
 
 // ───────────── fixture server ─────────────
 const server = http.createServer((req, res) => {
+  if (req.url.startsWith('/hang')) return; // never answers: exercises fetch timeouts
   const file = path.join(FIXTURES, path.normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, ''));
   if (!file.startsWith(FIXTURES) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404).end(); return; }
   const type = { '.html': 'text/html', '.svg': 'image/svg+xml' }[path.extname(file)] || 'application/octet-stream';
@@ -54,13 +55,13 @@ async function newItem(prevId, opts) {
 
 /** Close every tab except the harness page, open the fixture site active, attach to it. */
 let site = null;
-async function freshSite() {
+async function freshSite(url = SITE) {
   await site?.detach();
   await run(`const me = (await chrome.tabs.getCurrent()).id;
     for (const t of await chrome.tabs.query({})) if (t.id !== me) await chrome.tabs.remove(t.id).catch(() => {});
-    const t = await chrome.tabs.create({ url: ${JSON.stringify(SITE)}, active: true });
+    const t = await chrome.tabs.create({ url: ${JSON.stringify(url)}, active: true });
     await new Promise((r) => { const f = (id, i) => { if (id === t.id && i.status === 'complete') { chrome.tabs.onUpdated.removeListener(f); r(); } }; chrome.tabs.onUpdated.addListener(f); });`);
-  const t = await b.waitForTarget((x) => x.type === 'page' && x.url === SITE);
+  const t = await b.waitForTarget((x) => x.type === 'page' && x.url === url);
   site = await b.attach(t.targetId);
   await site.send('Page.bringToFront');
   await sleep(300);
@@ -101,6 +102,21 @@ test('popup renders every view without exceptions', async () => {
   assert.deepEqual(errs, [], 'uncaught exceptions in popup');
 });
 
+test('style inspector escapes page-controlled CSS in component previews', async () => {
+  await freshSite(SITE.replace('site.html', 'hostile.html'));
+  // a background popup tab in the same window scans the active (hostile) tab, like the real popup
+  await run(`await chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?view=inspect'), active: false })`);
+  const p = await b.attach((await b.waitForTarget((x) => x.url.includes('popup.html?view=inspect'))).targetId);
+  try {
+    await waitFor(() => p.evaluate(`document.querySelectorAll('[data-comp^="buttons:"]').length`), { label: 'button previews', ms: 8000 });
+    assert.equal(await p.evaluate(`!!document.getElementById('lupax-pwned')`), false, 'page markup was injected into the popup');
+    assert.deepEqual(p.exceptions(), []);
+  } finally {
+    await p.detach();
+    await b.send('Target.closeTarget', { targetId: p.targetId });
+  }
+});
+
 test('history, settings and accessibility report pages render without exceptions', async () => {
   await freshSite();
   const tabId = await run(`return (await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }))[0].id`);
@@ -119,6 +135,18 @@ test('history, settings and accessibility report pages render without exceptions
       await b.send('Target.closeTarget', { targetId: p.targetId });
     }
   }
+});
+
+test('accessibility score weighs every check by how many elements it analyzed', async () => {
+  await freshSite();
+  const r = await run(`const { scanA11y } = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(SITE)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: scanA11y }))[0].result;`);
+  const sum = (sev, k) => r.checks.filter((c) => !sev || c.severity === sev).reduce((s, c) => s + c[k], 0);
+  assert.ok(r.checks.filter((c) => c.passed + c.failed > 0).length >= 3, 'fixture exercises several checks');
+  assert.equal(r.passed, sum(null, 'passed'));
+  assert.equal(r.score, Math.round((r.passed / (r.passed + sum('issue', 'failed') + sum('warning', 'failed') * 0.5)) * 100));
+  assert.equal(r.truncated, false);
 });
 
 test('visible capture is stored as PNG', async () => {
@@ -242,8 +270,11 @@ test('editor saves annotations back to history', async () => {
   await ed.drag(r.x + r.w * 0.2, r.y + r.h * 0.2, r.x + r.w * 0.5, r.y + r.h * 0.5);
   await setSettings({ capture: { ...quietCapture, annotate: true, destination: 'none' } });
   await ed.evaluate(`document.getElementById('saveBtn').click()`);
-  const saved = await waitFor(() => db(`const x = await db.getItem(${JSON.stringify(it.id)}); return x && !x.pending ? { size: x.size } : null`), { label: 'saved edit' });
+  const saved = await waitFor(() => db(`const x = await db.getItem(${JSON.stringify(it.id)}); return x && !x.pending ? {
+    size: x.size, original: x.original?.size ?? 0 } : null`), { label: 'saved edit' });
   assert.ok(saved.size > 0);
+  assert.ok(saved.original > 0, 'the unannotated original is kept after saving');
+  assert.notEqual(saved.original, saved.size, 'original differs from the annotated image');
   assert.deepEqual(ed.exceptions(), []);
   await ed.detach();
 });
@@ -294,6 +325,68 @@ test('recording setup failure releases the tab, reports the error in the page, a
   assert.equal(it.kind, 'video');
 });
 
+test('a failed chunk write stops the recording and saves the intact part before it', async () => {
+  await freshSite();
+  await resetBadge();
+  const opts = { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 };
+  const prev = (await lastItem())?.id;
+  await send({ type: 'record-start', options: opts });
+  await waitFor(async () => (await badge()).text === 'REC', { label: 'REC badge', ms: 8000 });
+  await sleep(2500);
+  // simulate a full disk: every later chunk write throws, other stores keep working
+  const off = await b.attach((await b.waitForTarget((t) => t.url.endsWith('/offscreen.html'))).targetId);
+  const realPut = 'IDBObjectStore.prototype.__realPut';
+  await off.evaluate(`(() => { const real = ${realPut} = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (v, ...rest) {
+      if (this.name === 'chunks' && v?.seq >= 0) throw new DOMException('Disk full (test)', 'QuotaExceededError');
+      return real.call(this, v, ...rest); }; })()`);
+  // no record-stop: the failed write must end the recording by itself
+  const it = await newItem(prev, { ms: 15000 }).finally(async () => {
+    // the offscreen document outlives this test, so undo the fake disk-full
+    await off.evaluate(`IDBObjectStore.prototype.put = ${realPut}`).catch(() => {});
+    await off.detach();
+  });
+  assert.equal(it.kind, 'video');
+  assert.equal(it.head.slice(0, 4), '\x1aE\xdf\xa3', 'WebM/EBML header');
+  assert.ok(it.size > 1000);
+  await waitFor(async () => (await badge()).text !== 'REC', { label: 'REC badge cleared' });
+  assert.equal(await run('return (await chrome.storage.session.get("recording")).recording ?? null'), null);
+  assert.equal(await db(`return db.countChunks()`), 0, 'chunks cleaned up after the partial save');
+  const viewer = await waitFor(async () => (await run(`return (await chrome.tabs.query({})).map((t) => t.url)`)).find((u) => u.includes(`viewer.html?id=${it.id}`)), { label: 'viewer tab' });
+  assert.match(decodeURIComponent(viewer), /stopped early: storage failed \(Disk full \(test\)\)/);
+});
+
+test('a recording being set up holds the slot: no second recording can start during the countdown or screen picker', async () => {
+  await freshSite();
+  await resetBadge();
+  const session = () => run(`return (await chrome.storage.session.get('recording')).recording ?? null`);
+  const recorderWindows = () => run(`return (await chrome.tabs.query({})).filter((t) => t.url.includes('recorder.html')).length`);
+  // tab recording in its countdown → a desktop recording is refused
+  const opts = { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 3, quality: '720', fps: 24 };
+  const prev = (await lastItem())?.id;
+  await send({ type: 'record-start', options: opts });
+  await waitFor(async () => (await session())?.starting, { label: 'tab slot reserved' });
+  await send({ type: 'record-start', options: { ...opts, source: 'desktop' } });
+  await waitFor(async () => (await badge()).title.includes('already in progress'), { label: 'desktop start refused' });
+  assert.equal(await recorderWindows(), 0, 'no recorder window while a tab recording is starting');
+  await waitFor(async () => (await badge()).text === 'REC', { label: 'tab recording started', ms: 10000 });
+  assert.equal((await session()).starting, undefined);
+  await sleep(1500); // let MediaRecorder produce data, as the other recording tests do
+  await send({ type: 'record-stop' });
+  assert.equal((await newItem(prev, { ms: 15000 })).kind, 'video');
+
+  // desktop recorder in its screen picker → a tab recording is refused; cancelling frees the slot
+  await resetBadge();
+  await send({ type: 'record-start', options: { ...opts, source: 'desktop' } });
+  const rec = await waitFor(async () => { const r = await session(); return r?.starting && r.kind === 'desktop' ? r : null; }, { label: 'desktop slot reserved' });
+  await send({ type: 'record-start', options: { ...opts, countdown: 0 } });
+  await waitFor(async () => (await badge()).title.includes('already in progress'), { label: 'tab start refused' });
+  assert.equal(await run(`return (await chrome.tabCapture.getCapturedTabs()).filter((c) => c.status === 'active' || c.status === 'pending').length`), 0);
+  await send({ type: 'record-stop' }); // cancels the picker by closing the recorder window
+  await waitFor(async () => (await session()) === null, { label: 'slot freed after cancel' });
+  assert.equal(await run(`return chrome.windows.get(${rec.windowId}).then(() => true, () => false)`), false);
+});
+
 test('orphaned recording chunks are recovered into history', async () => {
   const res = await db(`
     const recId = 'test-orphan';
@@ -306,7 +399,7 @@ test('orphaned recording chunks are recovered into history', async () => {
   assert.deepEqual(res, { n: 1, name: 'crashed-tab-recovered.webm', text: 'abcdef', left: 0 });
 });
 
-test('history keeps 60 screenshots/exports and 20 recordings, never pruning pending edits', async () => {
+test('history keeps 60 screenshots/exports and 20 recordings, never pruning recent pending edits', async () => {
   const res = await db(`
     await db.clearItems();
     const tiny = new Blob(['x']);
@@ -329,11 +422,12 @@ test('ZIP export runs in the background, survives the popup closing, and de-dupl
     { url: svg, name: 'icon.svg', type: 'svg', format: 'svg' },
     { url: SITE.replace('site.html', 'logo.svg'), name: 'logo', type: 'image', format: 'svg' },
     { url: SITE.replace('site.html', 'missing.png'), name: 'missing.png', type: 'image', format: 'png' },
+    { url: SITE.replace('site.html', 'hang/slow.png'), name: 'slow.png', type: 'image', format: 'png' },
   ];
   const before = fs.existsSync(path.join(b.downloads, 'LupaX')) ? fs.readdirSync(path.join(b.downloads, 'LupaX')) : [];
   const prev = (await lastItem())?.id;
   await send({ type: 'export-zip', assets, title: 'Fixture', url: SITE });
-  const it = await newItem(prev, { ms: 15000 });
+  const it = await newItem(prev, { ms: 25000 }); // includes the 10 s timeout on the hanging asset
   assert.equal(it.format, 'zip');
   const file = await waitFor(() => {
     const f = fs.readdirSync(path.join(b.downloads, 'LupaX')).find((n) => n.endsWith('.zip') && !before.includes(n));

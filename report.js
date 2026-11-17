@@ -59,6 +59,7 @@ function render() {
         <h2>${esc(r.title || 'Untitled page')}</h2>
         <p><a href="${esc(r.url)}" target="_blank" rel="noreferrer">${esc(r.url)}</a></p>
         <p>${r.issues ? `${r.issues} issue${r.issues === 1 ? '' : 's'} block some users.` : 'No blocking issues found by automated checks.'} ${r.warnings ? `${r.warnings} warning${r.warnings === 1 ? '' : 's'} worth reviewing.` : ''}</p>
+        ${r.truncated ? '<p style="font-size:12.5px">Large page: contrast and readability checked the first 9,000 elements only.</p>' : ''}
         <p style="font-size:12.5px">Click <b>Show</b> on any row to scroll to and highlight the element in the page.</p>
       </div>
     </div>
@@ -97,6 +98,7 @@ $('#export').onclick = async () => {
   await putItem({ kind: 'file', format: 'json', name, blob, title: result.title, url: result.url });
   const url = URL.createObjectURL(blob);
   await chrome.downloads.download({ url, filename: `LupaX/${name}`, conflictAction: 'uniquify' });
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
   toast(`Exported ${name}`);
 };
 run();
