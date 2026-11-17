@@ -102,6 +102,43 @@ test('popup renders every view without exceptions', async () => {
   assert.deepEqual(errs, [], 'uncaught exceptions in popup');
 });
 
+test('asset scan: srcset URLs with commas, and inline SVGs that open and render on their own', async () => {
+  const url = SITE.replace('site.html', 'assets.html');
+  await freshSite(url);
+  const res = await run(`const { scanAssets } = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    const { assets } = (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: scanAssets }))[0].result;
+    // how a saved .svg behaves: parse it as standalone XML, then draw it and count painted pixels
+    const check = async (a) => {
+      const xml = decodeURIComponent(a.url.slice(a.url.indexOf(',') + 1));
+      const parses = !new DOMParser().parseFromString(xml, 'image/svg+xml').querySelector('parsererror');
+      const img = new Image();
+      const loaded = await new Promise((r) => { img.onload = () => r(true); img.onerror = () => r(false); img.src = a.url; });
+      let painted = 0;
+      if (loaded) {
+        const c = new OffscreenCanvas(96, 96), x = c.getContext('2d');
+        x.drawImage(img, 0, 0, 96, 96);
+        const d = x.getImageData(0, 0, 96, 96).data;
+        for (let i = 3; i < d.length; i += 4) if (d[i]) painted++;
+      }
+      return { name: a.name, parses, loaded, painted, hasSymbol: xml.includes('<symbol'), gradient: xml.includes('brand-grad"') };
+    };
+    return { urls: assets.map((a) => a.url), svgs: await Promise.all(assets.filter((a) => a.url.startsWith('data:image/svg+xml;charset')).map(check)) };`);
+  assert.ok(res.urls.some((u) => u.endsWith('/cdn/w_1200,c_fill/photo.jpg')), `largest srcset candidate, commas intact: ${res.urls.filter((u) => u.includes('/cdn/'))}`);
+  assert.ok(!res.urls.some((u) => /\/cdn\/w_\d+$/.test(u)), 'no URL cut at a comma');
+  const byName = (p) => res.svgs.find((s) => s.name.startsWith(p));
+  for (const p of ['star-', 'star-xlink-', 'label-']) {
+    const s = byName(p);
+    assert.ok(s, `inline svg ${p}* found: ${res.svgs.map((x) => x.name)}`);
+    assert.ok(s.parses && s.loaded, `${p}* is valid standalone SVG: ${JSON.stringify(s)}`);
+  }
+  for (const p of ['star-', 'star-xlink-']) {
+    const s = byName(p);
+    assert.ok(s.hasSymbol && s.gradient, `${p}* carries the sprite symbol and its gradient`);
+    assert.ok(s.painted > 500, `${p}* renders the icon, not a blank file (${s.painted} px)`);
+  }
+});
+
 test('Export ZIP exports the whole selection, even from another category', async () => {
   await freshSite();
   // a background popup tab scans the active (fixture) tab, like the real popup
