@@ -93,6 +93,7 @@ async function handle(msg) {
     case 'pick-color': return pickColor(await activeTab());
     case 'inspect': return toggleInspect(await activeTab(), msg.on);
     case 'export-zip': return exportAssetsZip(msg, await activeTab().catch(() => null));
+    case 'access-denied': if (accessDenied === false) accessDenied = true; return;
   }
 }
 
@@ -486,8 +487,31 @@ async function toggleInspect(tab, on) {
 const ASSET_FETCH_TIMEOUT_MS = 10_000;
 const ASSET_FETCH_CONCURRENCY = 4;
 
+const ACCESS_WAIT_MS = 60_000;
+let accessDenied = null; // set by the popup when the user declines the site-access prompt
+
+/**
+ * LupaX only has access to the tab it was opened on, so downloading assets from other sites needs the user's OK.
+ * The popup shows Chrome's prompt; it can close while the prompt is open, so the worker checks for the grant itself.
+ * Checking every half second also keeps the worker alive while the user decides.
+ */
+async function waitForAccess(origins) {
+  if (!origins?.length || (await chrome.permissions.contains({ origins }))) return true;
+  accessDenied = false;
+  try {
+    for (const end = Date.now() + ACCESS_WAIT_MS; Date.now() < end && !accessDenied; await sleep(500)) {
+      if (await chrome.permissions.contains({ origins })) return true;
+    }
+    return false;
+  } finally {
+    accessDenied = null;
+  }
+}
+
 /** Runs here rather than in the popup so closing the popup doesn't lose the export. */
-async function exportAssetsZip({ assets, title, url }, tab) {
+async function exportAssetsZip({ assets, title, url, origins }, tab) {
+  // without access, assets on sites that allow it (CORS) still download; the rest are counted as unreachable
+  const access = await waitForAccess(origins);
   // a few fetches at a time, each with a timeout, so one slow or hanging asset can't stall the export
   const results = new Array(assets.length);
   let next = 0, fetched = 0;
@@ -506,7 +530,10 @@ async function exportAssetsZip({ assets, title, url }, tab) {
   await Promise.all(Array.from({ length: Math.min(ASSET_FETCH_CONCURRENCY, assets.length) }, worker));
   const files = results.filter(Boolean); // input order, so duplicate names are suffixed deterministically
   await chrome.action.setBadgeText({ text: '' });
-  if (!files.length) throw new Error('Could not download any of the selected assets');
+  if (!files.length) {
+    throw new Error(access ? 'Could not download any of the selected assets'
+      : 'LupaX needs your permission to download from these sites. Export again and choose Allow.');
+  }
   const name = `${baseName(title, url)}-assets.zip`;
   const id = await putItem({ kind: 'file', format: 'zip', name, blob: makeZip(files), title, url });
   await downloadItem(id, `LupaX/${name}`);
@@ -521,7 +548,12 @@ function friendlyError(message) {
   if (/file:\/\//i.test(message) && /cannot access|permission/i.test(message)) {
     return 'LupaX can’t read local files yet. Turn on “Allow access to file URLs” for LupaX in chrome://extensions.';
   }
-  if (/cannot access (a |contents of )|cannot be scripted|extensions gallery|missing host permission|'activeTab' permission|cannot capture/i.test(message)) {
+  // LupaX only gets access to a tab when it's opened there (icon or shortcut), and loses it when the tab goes to another site
+  // Chrome words this the same for a page LupaX wasn't opened on and a browser page, and doesn't reveal which: say both
+  if (/permission to access the respective host|missing host permission|'activeTab' permission/i.test(message)) {
+    return 'LupaX doesn’t have access to this page. Click the LupaX icon on it and try again. (Browser pages, the Web Store and the PDF viewer can’t be used at all.)';
+  }
+  if (/cannot access (a |contents of )|cannot be scripted|extensions gallery|cannot capture/i.test(message)) {
     return 'Chrome doesn’t let extensions capture or read this page (browser pages, the Web Store, the PDF viewer).';
   }
   return message;

@@ -15,7 +15,7 @@
     "desktopCapture",
     "clipboardWrite"
   ],
-  "host_permissions": ["<all_urls>"],
+  "optional_host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {
     "default_popup": "popup.html",
@@ -24,9 +24,6 @@
   },
   "options_page": "settings.html",
   "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "web_accessible_resources": [
-    { "resources": ["fonts/*"], "matches": ["<all_urls>"] }
-  ],
   "commands": {
     "capture-visible": { "suggested_key": { "default": "Alt+Shift+V" }, "description": "Capture visible area" },
     "capture-area": { "suggested_key": { "default": "Alt+Shift+S" }, "description": "Capture selected region" },

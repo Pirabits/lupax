@@ -150,17 +150,26 @@ async function downloadAsset(a) {
   toast(`Downloading ${a.name}`);
 }
 
+/** The site patterns an export needs access to: LupaX only has access to the tab it was opened on. */
+const exportOrigins = (items) => [...new Set(items.filter((a) => /^https?:/i.test(a.url)).map((a) => `${new URL(a.url).origin}/*`))];
+
 /** The background builds the ZIP so the export survives the popup closing. */
 async function exportZip(items) {
   const btn = $('#zip');
   btn.disabled = true;
   btn.innerHTML = `${icon('download')}Exporting…`;
-  await send({
+  const origins = exportOrigins(items);
+  // nothing is awaited before the prompt: Chrome only shows it during the click. The popup may close while the
+  // prompt is open, so the worker starts now and watches for the grant itself.
+  const started = send({
     type: 'export-zip',
     assets: items.map(({ url, name, type, format }) => ({ url, name, type, format })),
-    title: state.tab?.title, url: state.tab?.url,
+    title: state.tab?.title, url: state.tab?.url, origins,
   });
+  const access = origins.length ? chrome.permissions.request({ origins }).catch(() => false) : true;
+  await started;
   toast(`Exporting ${items.length} assets — you can close this popup`);
+  if (!(await access)) send({ type: 'access-denied' });
 }
 
 function renderA11y() {

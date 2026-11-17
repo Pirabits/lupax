@@ -21,7 +21,9 @@ const server = http.createServer((req, res) => {
   const file = path.join(FIXTURES, path.normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, ''));
   if (!file.startsWith(FIXTURES) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404).end(); return; }
   const type = { '.html': 'text/html', '.svg': 'image/svg+xml' }[path.extname(file)] || 'application/octet-stream';
-  res.writeHead(200, { 'content-type': type }).end(fs.readFileSync(file));
+  // ?cors marks a file served the way CDNs serve it to other sites, so any page (or extension) may download it
+  const cors = req.url.includes('cors') ? { 'access-control-allow-origin': '*' } : {};
+  res.writeHead(200, { 'content-type': type, ...cors }).end(fs.readFileSync(file));
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const SITE = `http://127.0.0.1:${server.address().port}/site.html`;
@@ -55,7 +57,7 @@ async function newItem(prevId, opts) {
 
 /** Close every tab except the harness page, open the fixture site active, attach to it. */
 let site = null;
-async function freshSite(url = SITE) {
+async function freshSite(url = SITE, { click = true } = {}) {
   await site?.detach();
   await run(`const me = (await chrome.tabs.getCurrent()).id;
     for (const t of await chrome.tabs.query({})) if (t.id !== me) await chrome.tabs.remove(t.id).catch(() => {});
@@ -65,7 +67,22 @@ async function freshSite(url = SITE) {
   site = await b.attach(t.targetId);
   await site.send('Page.bringToFront');
   await sleep(300);
+  if (click) await clickIcon(url);
   return site;
+}
+
+/**
+ * Click the LupaX toolbar icon on a tab, like a user would: Chrome then grants access to that tab (activeTab) until it
+ * navigates. LupaX has no standing access to sites, so this has to happen before anything touches the page.
+ */
+async function clickIcon(url) {
+  const { targetInfos } = await b.send('Target.getTargets', { filter: [{ type: 'tab' }] });
+  const tab = targetInfos.find((x) => x.url === url);
+  if (!tab) throw new Error(`no tab for ${url}`);
+  await b.send('Extensions.triggerAction', { id: b.extId, targetId: tab.targetId });
+  const popup = await b.waitForTarget((x) => x.type === 'page' && x.url.endsWith('/popup.html'));
+  await b.send('Target.closeTarget', { targetId: popup.targetId });
+  await waitFor(async () => !(await b.targets()).some((x) => x.url.endsWith('/popup.html')), { label: 'popup closed' });
 }
 const resetBadge = () => run(`await chrome.action.setBadgeText({ text: '' }); await chrome.action.setTitle({ title: 'LupaX' });`);
 const quietCapture = { annotate: false, destination: 'none', fileType: 'png', copy: false };
@@ -310,6 +327,31 @@ test('report page survives a bad focus parameter and a scan that returns nothing
   }
 });
 
+test('report page: after the tab moves to another site, Rescan explains how to reconnect, and works once the icon is clicked', async () => {
+  await freshSite();
+  const tabId = await run(`return (await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }))[0].id`);
+  const p = await b.open(b.url(`report.html?tab=${tabId}`));
+  const rescan = () => p.evaluate(`document.querySelector('#root').innerHTML = ''; document.getElementById('rescan').click(); true`);
+  const other = SITE.replace('127.0.0.1', 'localhost');
+  try {
+    await waitFor(() => p.evaluate(`!!document.querySelector('.donut b')`), { label: 'report rendered', ms: 8000 });
+    // Chrome keeps the access through reloads and same-site pages, and takes it back when the tab goes to another site
+    await site.send('Page.navigate', { url: other });
+    await waitFor(() => site.evaluate('location.hostname === "localhost" && document.readyState === "complete"').catch(() => false), { label: 'navigated' });
+    await rescan();
+    const msg = await waitFor(() => p.evaluate(`document.querySelector('#root p')?.textContent`), { label: 'error card' });
+    assert.match(msg, /went to another site\. Click the LupaX icon on that tab, then press Rescan/);
+    await site.send('Page.bringToFront'); // the user goes back to the page and clicks the icon there
+    await clickIcon(other);
+    await rescan();
+    await waitFor(() => p.evaluate(`!!document.querySelector('.donut b')`), { label: 'report rendered again', ms: 8000 });
+    assert.deepEqual(p.exceptions(), []);
+  } finally {
+    await p.detach();
+    await b.send('Target.closeTarget', { targetId: p.targetId });
+  }
+});
+
 test('accessibility score weighs every check by how many elements it analyzed', async () => {
   await freshSite();
   const r = await run(`const { scanA11y } = await import('./lib/scan.js');
@@ -427,13 +469,27 @@ test('switching tabs during a full-page capture stops it instead of stitching th
 
 test('captures on pages Chrome protects explain why instead of showing Chrome’s raw error', async () => {
   await setSettings({ capture: quietCapture });
+  // the icon was clicked there, so Chrome allows a plain screenshot, but nothing can run inside the page
   await freshSite('chrome://version/');
-  for (const mode of ['visible', 'area', 'full']) {
+  for (const mode of ['area', 'full']) {
     await resetBadge();
     await send({ type: 'capture', mode });
     const title = await waitFor(async () => { const t = (await badge()).title; return t !== 'LupaX' ? t : null; }, { label: `${mode} error`, ms: 5000 });
     assert.equal(title, 'LupaX — Chrome doesn’t let extensions capture or read this page (browser pages, the Web Store, the PDF viewer).', mode);
   }
+});
+
+test('LupaX has no standing access to sites: without its icon clicked on a page, a capture explains what to do', async () => {
+  await setSettings({ capture: quietCapture });
+  await freshSite(SITE, { click: false });
+  const prev = (await lastItem())?.id;
+  for (const mode of ['visible', 'full']) {
+    await resetBadge();
+    await send({ type: 'capture', mode });
+    const title = await waitFor(async () => { const t = (await badge()).title; return t !== 'LupaX' ? t : null; }, { label: `${mode} error`, ms: 5000 });
+    assert.equal(title, 'LupaX — LupaX doesn’t have access to this page. Click the LupaX icon on it and try again. (Browser pages, the Web Store and the PDF viewer can’t be used at all.)', mode);
+  }
+  assert.equal((await lastItem())?.id, prev, 'nothing was captured');
 });
 
 test('JPG and PDF output formats', async () => {
@@ -445,6 +501,7 @@ test('JPG and PDF output formats', async () => {
   assert.equal(jpg.format, 'jpg');
   assert.equal(jpg.type, 'image/jpeg');
   await setSettings({ capture: { ...quietCapture, fileType: 'pdf' } });
+  await freshSite(); // the first capture opened the editor in front of the page
   prev = jpg.id;
   await send({ type: 'capture', mode: 'visible' });
   const pdf = await newItem(prev);
@@ -507,6 +564,19 @@ test('inspect mode adds and removes its overlay', async () => {
   await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
   await send({ type: 'inspect', on: false });
   await waitFor(() => site.evaluate('!document.querySelector("lupax-root")'), { label: 'overlay removed' });
+});
+
+test('inspector leaves no trace a page can see: no font added to the page, no extension files exposed', async () => {
+  await freshSite();
+  await send({ type: 'inspect', on: true });
+  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  await sleep(500); // a font load would have finished by now
+  const fams = await site.evaluate('[...document.fonts].map((f) => f.family).join(",")');
+  assert.ok(!/jakarta/i.test(fams), `page font list gained: ${fams}`);
+  const id = await run('return chrome.runtime.id');
+  const exposed = await site.evaluate(`fetch('chrome-extension://${id}/fonts/PlusJakartaSans-latin.woff2').then(() => true, () => false)`);
+  assert.equal(exposed, false, 'a web page can fetch the extension font, so it can tell LupaX is installed');
+  await send({ type: 'inspect', on: false });
 });
 
 test('color picker stores the picked color', async () => {
@@ -842,6 +912,40 @@ test('ZIP export runs in the background, survives the popup closing, and de-dupl
   const listing = execFileSync('unzip', ['-Z1', file]).toString().trim().split('\n').sort();
   execFileSync('unzip', ['-tq', file]);
   assert.deepEqual(listing, ['images/logo.svg', 'svgs/icon-2.svg', 'svgs/icon.svg']);
+});
+
+test('ZIP export from other sites: waits for the user to allow access, and if declined keeps what those sites allow', async () => {
+  await freshSite();
+  const other = SITE.replace('127.0.0.1', 'localhost'); // another site than the page LupaX was opened on
+  const origins = [other.replace('site.html', '*')];
+  const exportFrom = (urls) => send({ type: 'export-zip', title: 'Fixture', url: SITE, origins,
+    assets: urls.map((u, i) => ({ url: other.replace('site.html', u), name: `logo-${i}`, type: 'image', format: 'svg' })) });
+  const errorTitle = () => badge().then(({ title }) => (title !== 'LupaX' ? title : null));
+
+  // nothing reachable without access: once declined, the error says how to get it
+  await resetBadge();
+  const prev = (await lastItem())?.id;
+  await exportFrom(['logo.svg']);
+  await sleep(1500);
+  assert.equal(await errorTitle(), null, 'the export waits while Chrome’s prompt is open instead of failing at once');
+  await send({ type: 'access-denied' });
+  const title = await waitFor(errorTitle, { label: 'declined error', ms: 15000 });
+  assert.equal(title, 'LupaX — LupaX needs your permission to download from these sites. Export again and choose Allow.');
+  assert.equal((await lastItem())?.id, prev, 'no empty ZIP');
+
+  // a site that allows downloads from anywhere (CORS) still works without access; the other asset is skipped
+  const before = fs.existsSync(path.join(b.downloads, 'LupaX')) ? fs.readdirSync(path.join(b.downloads, 'LupaX')) : [];
+  await exportFrom(['logo.svg?cors', 'logo.svg']);
+  await sleep(500);
+  await send({ type: 'access-denied' });
+  const it = await newItem(prev, { ms: 15000 });
+  assert.equal(it.format, 'zip');
+  const file = await waitFor(() => {
+    const f = fs.readdirSync(path.join(b.downloads, 'LupaX')).find((n) => n.endsWith('.zip') && !before.includes(n));
+    return f && path.join(b.downloads, 'LupaX', f);
+  }, { label: 'downloaded zip' });
+  await sleep(300);
+  assert.deepEqual(execFileSync('unzip', ['-Z1', file]).toString().trim().split('\n'), ['images/logo-0.svg']);
 });
 
 // ───────────── run ─────────────
