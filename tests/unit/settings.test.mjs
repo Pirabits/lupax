@@ -40,3 +40,26 @@ test('every quality preset is complete', () => {
   }
   assert.ok(QUALITY[DEFAULTS.record.quality], 'default quality exists');
 });
+
+test('invalid stored values fall back to defaults instead of breaking pages', async () => {
+  for (const bad of [null, 'garbage', 42, [], { capture: null }, { capture: 'x', record: [] }]) {
+    store.settings = bad;
+    assert.deepEqual(await getSettings(), DEFAULTS, JSON.stringify(bad));
+  }
+  store.settings = {
+    capture: { fileType: 7, delay: 4, destination: 'cloud', jpgQuality: 3, annotate: 'yes', copy: true, mode: 'full' },
+    record: { quality: 1080, fps: '30', countdown: 5, mic: true, webcamPosition: null },
+  };
+  const s = await getSettings();
+  assert.deepEqual(
+    { fileType: s.capture.fileType, delay: s.capture.delay, destination: s.capture.destination, jpgQuality: s.capture.jpgQuality, annotate: s.capture.annotate },
+    { fileType: 'png', delay: 3, destination: 'downloads', jpgQuality: 0.92, annotate: true },
+    'invalid capture values replaced by defaults');
+  assert.equal(s.capture.copy, true, 'valid values kept');
+  assert.equal(s.capture.mode, 'full');
+  assert.equal(s.record.quality, '1080', 'numeric quality is not a valid key');
+  assert.equal(s.record.fps, 30);
+  assert.equal(s.record.countdown, 5);
+  assert.equal(s.record.mic, true);
+  assert.equal(s.record.webcamPosition, 'bottom-left');
+});

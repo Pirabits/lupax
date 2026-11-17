@@ -102,6 +102,86 @@ test('popup renders every view without exceptions', async () => {
   assert.deepEqual(errs, [], 'uncaught exceptions in popup');
 });
 
+test('asset scan: srcset URLs with commas, and inline SVGs that open and render on their own', async () => {
+  const url = SITE.replace('site.html', 'assets.html');
+  await freshSite(url);
+  const res = await run(`const { scanAssets } = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    const { assets } = (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: scanAssets }))[0].result;
+    // how a saved .svg behaves: parse it as standalone XML, then draw it and count painted pixels
+    const check = async (a) => {
+      const xml = decodeURIComponent(a.url.slice(a.url.indexOf(',') + 1));
+      const parses = !new DOMParser().parseFromString(xml, 'image/svg+xml').querySelector('parsererror');
+      const img = new Image();
+      const loaded = await new Promise((r) => { img.onload = () => r(true); img.onerror = () => r(false); img.src = a.url; });
+      let painted = 0;
+      if (loaded) {
+        const c = new OffscreenCanvas(96, 96), x = c.getContext('2d');
+        x.drawImage(img, 0, 0, 96, 96);
+        const d = x.getImageData(0, 0, 96, 96).data;
+        for (let i = 3; i < d.length; i += 4) if (d[i]) painted++;
+      }
+      return { name: a.name, parses, loaded, painted, hasSymbol: xml.includes('<symbol'), gradient: xml.includes('brand-grad"') };
+    };
+    return { urls: assets.map((a) => a.url), svgs: await Promise.all(assets.filter((a) => a.url.startsWith('data:image/svg+xml;charset')).map(check)) };`);
+  assert.ok(res.urls.some((u) => u.endsWith('/cdn/w_1200,c_fill/photo.jpg')), `largest srcset candidate, commas intact: ${res.urls.filter((u) => u.includes('/cdn/'))}`);
+  assert.ok(!res.urls.some((u) => /\/cdn\/w_\d+$/.test(u)), 'no URL cut at a comma');
+  const byName = (p) => res.svgs.find((s) => s.name.startsWith(p));
+  for (const p of ['star-', 'star-xlink-', 'label-']) {
+    const s = byName(p);
+    assert.ok(s, `inline svg ${p}* found: ${res.svgs.map((x) => x.name)}`);
+    assert.ok(s.parses && s.loaded, `${p}* is valid standalone SVG: ${JSON.stringify(s)}`);
+  }
+  for (const p of ['star-', 'star-xlink-']) {
+    const s = byName(p);
+    assert.ok(s.hasSymbol && s.gradient, `${p}* carries the sprite symbol and its gradient`);
+    assert.ok(s.painted > 500, `${p}* renders the icon, not a blank file (${s.painted} px)`);
+  }
+});
+
+test('on a page Chrome won’t let extensions read, views explain why and keep actions disabled', async () => {
+  await freshSite('chrome://version/');
+  for (const v of ['inspect', 'assets']) {
+    await run(`await chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?view=${v}'), active: false })`);
+    const p = await b.attach((await b.waitForTarget((x) => x.url.includes(`popup.html?view=${v}`))).targetId);
+    try {
+      await waitFor(() => p.evaluate(`document.querySelectorAll('.empty-state').length`), { label: `${v} empty state` });
+      assert.equal(await p.evaluate(`document.querySelectorAll('.err-box').length`), 0, 'not shown as an error');
+      const disabled = await p.evaluate(`[...document.querySelectorAll('#copyAll, #exportAll, #report')].map((b) => b.disabled)`);
+      assert.ok(disabled.length && disabled.every(Boolean), `actions disabled in ${v}: ${disabled}`);
+      assert.deepEqual(p.exceptions(), []);
+    } finally {
+      await p.detach();
+      await b.send('Target.closeTarget', { targetId: p.targetId });
+    }
+  }
+});
+
+test('Export ZIP exports the whole selection, even from another category', async () => {
+  await freshSite();
+  // a background popup tab scans the active (fixture) tab, like the real popup
+  await run(`await chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?view=assets'), active: false })`);
+  const p = await b.attach((await b.waitForTarget((x) => x.url.includes('popup.html?view=assets'))).targetId);
+  try {
+    await waitFor(() => p.evaluate(`document.querySelectorAll('.acard').length`), { label: 'asset cards', ms: 8000 });
+    // record what Export sends instead of downloading
+    await p.evaluate(`window.__zips = []; const real = chrome.runtime.sendMessage.bind(chrome.runtime);
+      chrome.runtime.sendMessage = (m, ...r) => m?.type === 'export-zip' ? (window.__zips.push(m), Promise.resolve({ ok: true })) : real(m, ...r); true`);
+    const click = (sel) => p.evaluate(`document.querySelector(${JSON.stringify(sel)}).click(); true`);
+    await click('[data-type="svg"]');
+    const picked = await p.evaluate(`document.querySelector('.acard .cb').click(); document.querySelector('.acard b')?.textContent`);
+    await click('[data-type="icon"]'); // a category the selected SVG is not in
+    assert.equal(await p.evaluate(`document.getElementById('zip').disabled`), false, 'Export enabled while something is selected');
+    await click('#zip');
+    const sent = await waitFor(() => p.evaluate('window.__zips[0]?.assets'), { label: 'export-zip message' });
+    assert.deepEqual(sent.map((a) => a.name), [picked]);
+    assert.deepEqual(p.exceptions(), []);
+  } finally {
+    await p.detach();
+    await b.send('Target.closeTarget', { targetId: p.targetId });
+  }
+});
+
 test('style inspector escapes page-controlled CSS in component previews', async () => {
   await freshSite(SITE.replace('site.html', 'hostile.html'));
   // a background popup tab in the same window scans the active (hostile) tab, like the real popup
@@ -137,6 +217,99 @@ test('history, settings and accessibility report pages render without exceptions
   }
 });
 
+test('accessibility scan: text over images, hidden content and svg titles are not misreported', async () => {
+  const url = SITE.replace('site.html', 'a11y-edge.html');
+  await freshSite(url);
+  const r = await run(`const { scanA11y } = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: scanA11y }))[0].result;`);
+  const byId = (id) => r.checks.find((c) => c.id === id);
+  assert.deepEqual(byId('contrast').items.map((i) => i.text), ['Really faded text'], 'only the real failure: not the photo heading, not the closed menu');
+  assert.deepEqual(byId('alt').items.map((i) => i.selector.split(' > ').pop()), ['#no-alt'], 'only the image without a name');
+  assert.equal(byId('alt').passed, 3, 'hero img (alt), svg (title), aria-hidden img');
+
+  // the in-page inspector uses the same rule for the photo heading
+  await send({ type: 'inspect', on: true });
+  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  const h = await site.evaluate(`(() => { const r = document.querySelector('.hero h2').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; })()`);
+  await site.click(h.x, h.y); // pin it: the panel opens
+  // the panel lives in a closed shadow root; CDP can still read it
+  const panelText = await waitFor(async () => {
+    const doc = JSON.stringify(await site.send('DOM.getDocument', { depth: -1, pierce: true }));
+    return doc.includes('Contrast') ? doc : null;
+  }, { label: 'inspector panel with contrast row' });
+  await send({ type: 'inspect', on: false });
+  assert.ok(panelText.includes('Over image'), 'inspector flags the photo heading instead of rating it Poor');
+  assert.ok(!panelText.includes('"Poor"'), 'not rated Poor');
+});
+
+test('"Show on page" selectors point at the reported element, not an earlier look-alike', async () => {
+  const url = SITE.replace('site.html', 'deep.html');
+  await freshSite(url);
+  const r = await run(`const { scanA11y } = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: scanA11y }))[0].result;`);
+  const [item] = r.checks.find((c) => c.id === 'alt').items;
+  const hit = await site.evaluate(`(() => { const all = document.querySelectorAll(${JSON.stringify(item.selector)}); return { n: all.length, alt: all[0]?.getAttribute('alt') }; })()`);
+  assert.deepEqual(hit, { n: 1, alt: null }, `selector ${item.selector} matches only the image without alt`);
+});
+
+test('web components: scans, "Show on page" and the inspector reach into open shadow roots', async () => {
+  const url = SITE.replace('site.html', 'shadow.html');
+  await freshSite(url);
+  const scan = (fn) => run(`const m = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: m.${fn} }))[0].result;`);
+
+  const a = await scan('scanA11y');
+  const items = (id) => a.checks.find((c) => c.id === id).items;
+  assert.ok(items('contrast').some((i) => i.text === 'Faint text inside a shadow root'), 'contrast checked inside the shadow root');
+  const alts = items('alt').map((i) => i.selector);
+  assert.equal(alts.length, 2, `both images without alt, including the nested component: ${alts}`);
+  assert.ok(alts.every((s) => s.includes(' >>> ')), `selectors go through the host: ${alts}`);
+  assert.ok(items('names').some((i) => i.selector.endsWith('button.icon-only') || i.selector.includes('>>> button')), 'unnamed button inside the shadow root');
+  // "Show" follows the >>> path down to the nested image
+  const shown = await run(`const m = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: m.highlightOnPage, args: [${JSON.stringify(alts.find((s) => s.split(' >>> ').length === 3))}, 'x'] }))[0].result;`);
+  assert.equal(shown, true, 'nested shadow image highlighted');
+
+  const st = await scan('scanStyles');
+  assert.ok(st.colors.some((c) => c.value === '#C9C9C9'), 'shadow text color in the palette');
+  const as = await scan('scanAssets');
+  assert.ok(as.assets.some((x) => x.url.endsWith('/logo.svg?nested')), 'asset from the nested shadow root');
+
+  // inspector: hover hits the element inside the component, and ↑ climbs out to the host
+  await send({ type: 'inspect', on: true });
+  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  const pt = await site.evaluate(`(() => { const r = document.querySelector('x-card').shadowRoot.querySelector('.inside-shadow').getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; })()`);
+  await site.click(pt.x, pt.y);
+  const panel = async () => JSON.stringify(await site.send('DOM.getDocument', { depth: -1, pierce: true }));
+  await waitFor(async () => (await panel()).includes('p.inside-shadow'), { label: 'panel shows the shadow paragraph' });
+  await site.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38 });
+  await site.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38 });
+  await waitFor(async () => (await panel()).includes('◆ x-card'), { label: 'ArrowUp reaches the host' });
+  await send({ type: 'inspect', on: false });
+});
+
+test('report page survives a bad focus parameter and a scan that returns nothing', async () => {
+  await freshSite();
+  const tabId = await run(`return (await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }))[0].id`);
+  const p = await b.open(b.url(`report.html?tab=${tabId}&focus=${encodeURIComponent('x"] b, [y')}`));
+  try {
+    await waitFor(() => p.evaluate(`!!document.querySelector('.donut b')`), { label: 'report rendered', ms: 8000 });
+    assert.deepEqual(p.exceptions(), [], 'a focus value that is not a valid selector does not throw');
+    // the injected scan comes back without a result (frame navigated or crashed mid-scan)
+    await p.evaluate(`chrome.scripting.executeScript = async () => [{}]; document.getElementById('rescan').click(); true`);
+    const msg = await waitFor(() => p.evaluate(`document.querySelector('#root h2')?.textContent === 'Can’t scan this tab' && document.querySelector('#root p').textContent`), { label: 'error card' });
+    assert.match(msg, /Rescan/);
+    assert.deepEqual(p.exceptions(), []);
+  } finally {
+    await p.detach();
+    await b.send('Target.closeTarget', { targetId: p.targetId });
+  }
+});
+
 test('accessibility score weighs every check by how many elements it analyzed', async () => {
   await freshSite();
   const r = await run(`const { scanA11y } = await import('./lib/scan.js');
@@ -147,6 +320,49 @@ test('accessibility score weighs every check by how many elements it analyzed', 
   assert.equal(r.passed, sum(null, 'passed'));
   assert.equal(r.score, Math.round((r.passed / (r.passed + sum('issue', 'failed') + sum('warning', 'failed') * 0.5)) * 100));
   assert.equal(r.truncated, false);
+  const byId = (id) => r.checks.find((c) => c.id === id);
+  assert.equal(byId('labels').summary, '1 form field has no accessible label');
+  assert.deepEqual(byId('alt').items.map((i) => i.detail), ['inline SVG image'], 'a data: image is named, not split on "/"');
+});
+
+test('scans handle oklch()/lab() colors and elements with numeric values', async () => {
+  const url = SITE.replace('site.html', 'modern.html');
+  await freshSite(url);
+  const scan = (fn) => run(`const m = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: m.${fn} }))[0].result;`);
+  const hexes = (list) => list.map((c) => c.value);
+  const near = (hex, [r, g, b], tol = 12) => { const n = parseInt(hex.slice(1, 7), 16); return Math.abs((n >> 16) - r) <= tol && Math.abs(((n >> 8) & 255) - g) <= tol && Math.abs((n & 255) - b) <= tol; };
+
+  // <progress>/<meter>/<li value> used to throw "trim is not a function" and kill the whole style scan
+  const s = await scan('scanStyles');
+  assert.ok(s?.colors, 'style scan returned a result');
+  const colors = hexes(s.colors);
+  assert.ok(colors.some((h) => near(h, [21, 93, 252])), `oklch blue-600 is in the palette: ${colors}`);
+  assert.ok(colors.some((h) => near(h, [229, 229, 229])), `oklch gray text is in the palette: ${colors}`);
+  assert.ok(colors.some((h) => near(h, [0, 166, 62], 20)), `oklch shadow color is in the palette: ${colors}`);
+  assert.ok(colors.length >= 6, `gradient (lab/oklch) stops are collected too: ${colors}`);
+  // both .cta elements share one style, so they are one component; its label still comes from the button text
+  assert.match(s.components.buttons[0]?.label || '', /^(Get started|Sign up)$/);
+  assert.ok(near(s.components.buttons[0].bg, [21, 93, 252]), `button background resolved: ${s.components.buttons[0].bg}`);
+
+  // white text on an oklch blue passes; light-gray oklch text on white fails
+  const a = await scan('scanA11y');
+  const contrast = a.checks.find((c) => c.id === 'contrast');
+  const failed = contrast.items.map((i) => i.text);
+  assert.ok(!failed.some((t) => /Get started|Sign up/.test(t)), `oklch button not misreported: ${JSON.stringify(contrast.items)}`);
+  assert.ok(failed.includes('Barely visible oklch text'), `oklch low-contrast text is reported: ${JSON.stringify(contrast.items)}`);
+});
+
+test('the worker ignores messages from code running in a web page', async () => {
+  await setSettings({ capture: quietCapture });
+  await freshSite();
+  const prev = (await lastItem())?.id;
+  // a content-script context (what a compromised page renderer could reach) asks for a capture
+  await run(`const [t] = await chrome.tabs.query({ url: ${JSON.stringify(SITE)} });
+    await chrome.scripting.executeScript({ target: { tabId: t.id }, func: () => chrome.runtime.sendMessage({ type: 'capture', mode: 'visible' }).catch(() => {}) });`);
+  await sleep(2000);
+  assert.equal((await lastItem())?.id, prev, 'no capture from a page-originated message');
 });
 
 test('visible capture is stored as PNG', async () => {
@@ -169,6 +385,55 @@ test('full-page capture stitches beyond the viewport', async () => {
   const it = await newItem(prev, { ms: 20000 });
   assert.ok(docH > vh * 1.5, `fixture should be taller than the viewport (${docH} vs ${vh})`);
   assert.equal(it.height, docH);
+});
+
+test('a second capture while one is running is refused and leaves the page intact', async () => {
+  await setSettings({ capture: { ...quietCapture, hideFixed: true } });
+  await freshSite();
+  await resetBadge();
+  await site.evaluate(`document.body.insertAdjacentHTML('afterbegin', '<div id="stick" style="position:sticky;top:0;height:40px;background:#ccc">sticky</div>'); true`);
+  const count = () => db('return (await db.listItems({ limit: 200 })).length');
+  const before = await count();
+  // e.g. the full-page shortcut pressed twice
+  await Promise.all([send({ type: 'capture', mode: 'full' }), send({ type: 'capture', mode: 'full' })]);
+  const err = await waitFor(async () => { const t = (await badge()).title; return t.includes('already') ? t : null; }, { label: 'busy error', ms: 5000 });
+  assert.match(err, /A capture is already in progress/);
+  await waitFor(async () => (await count()) > before, { label: 'capture saved', ms: 20000 });
+  await sleep(2500); // a second run would still be stitching
+  assert.equal(await count(), before + 1, 'exactly one capture was saved');
+  const page = await site.evaluate(`({ vis: document.getElementById('stick').style.visibility, sb: document.documentElement.style.scrollBehavior, fixed: (window.__ixFixed || []).length })`);
+  assert.deepEqual(page, { vis: '', sb: '', fixed: 0 }, 'sticky header and scroll-behavior restored');
+});
+
+test('switching tabs during a full-page capture stops it instead of stitching the other tab in', async () => {
+  await setSettings({ capture: { ...quietCapture, hideFixed: true } });
+  await freshSite();
+  await resetBadge();
+  const prev = (await lastItem())?.id;
+  await send({ type: 'capture', mode: 'full' });
+  await waitFor(async () => /%$/.test((await badge()).text), { label: 'capture in progress', ms: 5000 });
+  await run(`await chrome.tabs.create({ url: 'about:blank', active: true })`); // the user switches away mid-capture
+  const err = await waitFor(async () => { const t = (await badge()).title; return /switched tabs/.test(t) ? t : null; }, { label: 'stopped message', ms: 8000 });
+  assert.match(err, /Keep the page in front/);
+  await sleep(1500);
+  assert.equal((await lastItem())?.id, prev, 'no mixed-up image saved');
+  assert.equal(await site.evaluate(`document.documentElement.style.scrollBehavior`), '', 'page restored');
+  // the capture didn't hang, so the next one isn't refused as "already in progress"
+  await site.send('Page.bringToFront');
+  await run(`const [t] = await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }); await chrome.tabs.update(t.id, { active: true });`);
+  await send({ type: 'capture', mode: 'visible' });
+  await newItem(prev);
+});
+
+test('captures on pages Chrome protects explain why instead of showing Chrome’s raw error', async () => {
+  await setSettings({ capture: quietCapture });
+  await freshSite('chrome://version/');
+  for (const mode of ['visible', 'area', 'full']) {
+    await resetBadge();
+    await send({ type: 'capture', mode });
+    const title = await waitFor(async () => { const t = (await badge()).title; return t !== 'LupaX' ? t : null; }, { label: `${mode} error`, ms: 5000 });
+    assert.equal(title, 'LupaX — Chrome doesn’t let extensions capture or read this page (browser pages, the Web Store, the PDF viewer).', mode);
+  }
 });
 
 test('JPG and PDF output formats', async () => {
@@ -279,6 +544,54 @@ test('editor saves annotations back to history', async () => {
   await ed.detach();
 });
 
+test('editor: crop is clamped, unsaved edits warn, IME Enter, and Save survives a deleted item', async () => {
+  await setSettings({ capture: { ...quietCapture, annotate: true } });
+  await freshSite();
+  const prev = (await lastItem())?.id;
+  await send({ type: 'capture', mode: 'visible' });
+  const it = await newItem(prev);
+  const ed = await b.attach((await b.waitForTarget((x) => x.url.includes(`viewer.html?id=${it.id}`))).targetId);
+  try {
+    await sleep(1200);
+    const r = await ed.evaluate(`(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()`);
+    const unloadBlocked = () => ed.evaluate(`(() => { const e = new Event('beforeunload', { cancelable: true }); dispatchEvent(e); return e.defaultPrevented; })()`);
+    assert.equal(await unloadBlocked(), false, 'no warning before any edit');
+
+    // IME: Enter while composing must not commit the text box
+    await ed.evaluate(`document.querySelector('[data-tool=text]').click()`);
+    await ed.click(r.x + r.w * 0.1, r.y + r.h * 0.1);
+    await waitFor(() => ed.evaluate(`!!document.querySelector('.txt-in')`), { label: 'text box' });
+    await ed.evaluate(`(() => { const el = document.querySelector('.txt-in'); el.textContent = 'にほん';
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true })); })()`);
+    assert.equal(await ed.evaluate(`!!document.querySelector('.txt-in')`), true, 'IME Enter kept the text box open');
+    await ed.evaluate(`document.querySelector('.txt-in').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+    assert.equal(await ed.evaluate(`!!document.querySelector('.txt-in')`), false, 'plain Enter commits');
+    assert.equal(await unloadBlocked(), true, 'unsaved annotation warns before closing');
+
+    // crop dragged past the right edge of the image
+    await ed.evaluate(`document.querySelector('[data-tool=crop]').click()`);
+    await ed.drag(r.x + r.w * 0.6, r.y + r.h * 0.4, r.x + r.w + 15, r.y + r.h * 0.7);
+
+    // the item disappears while open (History delete / Clear history), then Save twice
+    await db(`await db.deleteItem(${JSON.stringify(it.id)})`);
+    await setSettings({ capture: { ...quietCapture, annotate: true, destination: 'none', fileType: 'png' } });
+    for (let i = 0; i < 2; i++) {
+      await ed.evaluate(`document.getElementById('saveBtn').click()`);
+      await waitFor(() => ed.evaluate(`!document.getElementById('saveBtn').disabled`), { label: 'save finished' });
+      await sleep(300);
+    }
+    const saved = await waitFor(() => db(`const x = await db.getItem(${JSON.stringify(it.id)}); if (!x) return null;
+      const bmp = await createImageBitmap(x.blob); return { w: bmp.width, h: bmp.height, pending: x.pending }`), { label: 'item restored by Save' });
+    assert.equal(saved.pending, false);
+    assert.ok(saved.w <= Math.ceil(it.width * 0.4) + 1 && saved.w >= Math.floor(it.width * 0.4) - 2, `crop clamped to the image: ${saved.w} of ${it.width}`);
+    assert.equal(await unloadBlocked(), false, 'no warning after saving');
+    assert.deepEqual(ed.exceptions(), []);
+    assert.equal(await ed.evaluate(`document.querySelector('.toast')?.textContent || ''`).then((t) => /Cannot read/.test(t)), false);
+  } finally {
+    await ed.detach();
+  }
+});
+
 test('tab recording saves a WebM and streams chunks to IndexedDB while recording', async () => {
   await setSettings({ record: { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 } });
   await freshSite();
@@ -297,6 +610,62 @@ test('tab recording saves a WebM and streams chunks to IndexedDB while recording
   assert.equal(await db(`return db.countChunks()`), 0, 'chunks cleaned up after save');
 });
 
+const recOpts = { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 };
+const offscreenRecording = () => run(`return (await chrome.runtime.sendMessage({ target: 'offscreen', type: 'status' }).catch(() => null))?.recording ?? null`);
+const sessionRecording = () => run(`return (await chrome.storage.session.get('recording')).recording ?? null`);
+
+test('two recording starts at once: the second is refused and the first keeps recording', async () => {
+  await freshSite();
+  await resetBadge();
+  const prev = (await lastItem())?.id;
+  // the offscreen document already exists (it also serves downloads): both starts get past setup and race
+  await run(`if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length)
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'download' });`);
+  // e.g. the record shortcut and the popup button at the same moment
+  await Promise.all([send({ type: 'record-start', options: recOpts }), send({ type: 'record-start', options: recOpts })]);
+  await waitFor(async () => { const r = await sessionRecording(); return r && !r.starting; }, { label: 'recording started', ms: 8000 });
+  await sleep(2500);
+  assert.equal(await offscreenRecording(), true, 'first recording still running');
+  await send({ type: 'record-stop' });
+  const it = await newItem(prev, { ms: 15000 });
+  assert.equal(it.kind, 'video');
+  assert.ok(!/recovered/.test(it.name), `saved normally, not recovered: ${it.name}`);
+});
+
+test('a crashed tab recorder does not block recording when the offscreen document is recreated', async () => {
+  await freshSite();
+  await resetBadge();
+  await send({ type: 'record-start', options: recOpts });
+  await waitFor(async () => { const r = await sessionRecording(); return r && !r.starting; }, { label: 'recording started', ms: 8000 });
+  // the recorder dies (renderer crash), then a download recreates the offscreen document
+  await run(`await chrome.offscreen.closeDocument();
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'download' });`);
+  assert.equal(await offscreenRecording(), false);
+  const prev = (await lastItem())?.id;
+  await send({ type: 'record-start', options: recOpts });
+  await waitFor(async () => (await offscreenRecording()) === true, { label: 'new recording started', ms: 8000 });
+  await sleep(2000);
+  await send({ type: 'record-stop' });
+  const it = await waitFor(async () => { const x = await lastItem(); return x && x.id !== prev && !/recovered/.test(x.name) ? x : null; }, { label: 'new recording saved', ms: 15000 });
+  assert.equal(it.kind, 'video');
+});
+
+test('stopping during the countdown cancels the tab recording quietly', async () => {
+  await freshSite();
+  await resetBadge();
+  const prev = (await lastItem())?.id;
+  await send({ type: 'record-start', options: { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 3, quality: '720', fps: 24 } });
+  await waitFor(() => site.evaluate('!!document.querySelector("[data-lupax-countdown]")'), { label: 'countdown overlay', ms: 8000 });
+  await send({ type: 'record-stop' });
+  await waitFor(async () => !(await site.evaluate('!!document.querySelector("[data-lupax-countdown]")')), { label: 'countdown removed on stop', ms: 2000 });
+  await sleep(4500); // past the end of the countdown, when the recording used to begin anyway
+  assert.equal(await run(`return (await chrome.storage.session.get('recording')).recording ?? null`), null, 'recording slot freed');
+  assert.deepEqual(await badge(), { text: '', title: 'LupaX' }, 'no REC badge and no error');
+  const captured = await run(`return (await chrome.tabCapture.getCapturedTabs()).filter((c) => c.status === 'active' || c.status === 'pending').length`);
+  assert.equal(captured, 0, 'tab released');
+  assert.equal((await lastItem())?.id, prev, 'nothing saved');
+});
+
 test('recording setup failure releases the tab, reports the error in the page, and allows a retry', async () => {
   await freshSite();
   await resetBadge();
@@ -305,7 +674,7 @@ test('recording setup failure releases the tab, reports the error in the page, a
     await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'test' });`);
   const off = await b.attach((await b.waitForTarget((t) => t.url.endsWith('/offscreen.html'))).targetId);
   await off.evaluate(`(() => { const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia = (c) => c.video ? real(c) : Promise.reject(new DOMException('Mic blocked by test', 'NotAllowedError')); })()`);
+    navigator.mediaDevices.getUserMedia = (c) => c.video ? real(c) : Promise.reject(new DOMException('Mic in use by test', 'NotReadableError')); })()`);
   const opts = { source: 'tab', mic: true, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 };
   await send({ type: 'record-start', options: opts });
   await waitFor(async () => (await badge()).text === '!', { label: 'error badge' });
@@ -323,6 +692,25 @@ test('recording setup failure releases the tab, reports the error in the page, a
   await send({ type: 'record-stop' });
   const it = await newItem(prev, { ms: 15000 });
   assert.equal(it.kind, 'video');
+});
+
+test('record shortcut without a mic grant opens the grant page instead of failing', async () => {
+  await freshSite();
+  await resetBadge();
+  await run(`if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length)
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['USER_MEDIA', 'BLOBS'], justification: 'test' });`);
+  const off = await b.attach((await b.waitForTarget((t) => t.url.endsWith('/offscreen.html'))).targetId);
+  await off.evaluate(`(() => { const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (c) => c.video ? real(c) : Promise.reject(new DOMException('Permission denied', 'NotAllowedError')); })()`);
+  // what the Alt+Shift+R handler does: start straight away, without the popup's permission check
+  await send({ type: 'record-start', options: { ...recOpts, mic: true } });
+  const t = await b.waitForTarget((x) => x.url.includes('permissions.html?need=microphone'), 8000);
+  await off.detach();
+  assert.equal((await badge()).text, '', 'no error badge: the grant page explains what to do');
+  assert.equal(await sessionRecording(), null, 'slot freed');
+  const captured = await run(`return (await chrome.tabCapture.getCapturedTabs()).filter((c) => c.status === 'active' || c.status === 'pending').length`);
+  assert.equal(captured, 0, 'tab released');
+  await b.send('Target.closeTarget', { targetId: t.targetId });
 });
 
 test('a failed chunk write stops the recording and saves the intact part before it', async () => {
@@ -397,6 +785,23 @@ test('orphaned recording chunks are recovered into history', async () => {
     const it = await db.getItem(ids[0]);
     return { n: ids.length, name: it.name, text: await it.blob.text(), left: await db.countChunks() };`);
   assert.deepEqual(res, { n: 1, name: 'crashed-tab-recovered.webm', text: 'abcdef', left: 0 });
+});
+
+test('closing the recorder window mid-recording keeps what was recorded', async () => {
+  await resetBadge();
+  // a window/desktop recording in progress (the screen picker can't be driven in tests, so set up its state directly)
+  const winId = await run(`const w = await chrome.windows.create({ url: 'about:blank', type: 'popup', width: 300, height: 200 });
+    await chrome.storage.session.set({ recording: { kind: 'desktop', source: 'desktop', windowId: w.id, startedAt: Date.now(), pausedTotal: 0 } });
+    return w.id;`);
+  await db(`await db.appendChunk('test-window', -1, null, { name: 'desktop-rec', title: 'Desktop', mimeType: 'video/webm' });
+    await db.appendChunk('test-window', 0, new Blob(['abc'], { type: 'video/webm' }));`);
+  await run(`await chrome.windows.remove(${winId})`);
+  const t = await b.waitForTarget((x) => x.url.includes('viewer.html') && x.url.includes('notice='), 5000);
+  const id = new URL(t.url).searchParams.get('id');
+  const it = await db(`const x = await db.getItem(${JSON.stringify(id)}); return { name: x.name, text: await x.blob.text() }`);
+  assert.deepEqual(it, { name: 'desktop-rec-recovered.webm', text: 'abc' });
+  assert.equal(await sessionRecording(), null, 'slot freed');
+  await b.send('Target.closeTarget', { targetId: t.targetId });
 });
 
 test('history keeps 60 screenshots/exports and 20 recordings, never pruning recent pending edits', async () => {

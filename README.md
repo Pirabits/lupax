@@ -28,11 +28,11 @@ Requires Chrome 116+.
 ## Notes & limits
 
 - Chrome popups max out at 800×600 px, so long views (Capture, Style Inspector) scroll with a pinned action button.
-- Tab recording with mic/webcam needs a one-time grant (`permissions.html`) because offscreen documents can’t show permission prompts.
+- Tab recording with mic/webcam needs a one-time grant (`permissions.html`) because offscreen documents can’t show permission prompts. The popup opens it before recording; the record shortcut opens it when a grant is missing.
 - `chrome://` pages and the Web Store can’t be captured, scanned or recorded.
 - Scroll-and-stitch uses window scrolling; inner scroll containers capture one viewport.
 - Cursor highlight is drawn in the page, so it shows in tab recordings and in screen recordings only over the browser tab.
-- Recordings are WebM. They are written to IndexedDB in 1-second chunks while recording, so long recordings don't live in memory; if the browser crashes mid-recording, the chunks are recovered into history as `…-recovered.webm` on the next start.
+- Recordings are WebM. They are written to IndexedDB in 1-second chunks while recording, so long recordings don't live in memory; if a recording is interrupted (browser crash, recorder window closed, extension updated), the chunks are recovered into history as `…-recovered.webm`: right away for a closed recorder window or an update, otherwise on the next browser start.
 - History keeps the latest 60 screenshots/exports and 20 recordings (`HISTORY_LIMITS` in `lib/db.js`). Captures waiting for Save in the editor are kept for 24 hours (`PENDING_TTL_MS`), then count toward the limit like any other capture. Downloaded files are not affected.
 - Auto copy to clipboard is skipped for images over 20 MB (the toast says so).
 - Errors appear as a toast in the page, with the toolbar badge (`!`) and tooltip as a fallback on pages Chrome won't let extensions script.

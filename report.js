@@ -34,12 +34,13 @@ async function run() {
   $('#root').innerHTML = '<div class="empty">Running checks…</div>';
   try {
     const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: scanA11y });
+    // a frame that navigated or crashed mid-scan returns no result instead of throwing
+    if (!res?.result) throw new Error('The scan didn’t return a result. Reload the page and press Rescan.');
     result = res.result;
+    render();
   } catch (e) {
     $('#root').innerHTML = `<div class="card summary"><h2>Can’t scan this tab</h2><p>${esc(e.message)}</p></div>`;
-    return;
   }
-  render();
 }
 
 function render() {
@@ -82,12 +83,16 @@ function render() {
     b.onclick = async () => {
       const [cid, i] = b.dataset.hl.split(':');
       const it = result.checks.find((c) => c.id === cid).items[+i];
-      await chrome.tabs.update(tabId, { active: true });
-      const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: highlightOnPage, args: [it.selector, `${it.label} · ${it.detail}`.slice(0, 80)] });
-      if (!res?.result) toast('Element not found — the page may have changed');
+      try {
+        await chrome.tabs.update(tabId, { active: true });
+        const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: highlightOnPage, args: [it.selector, `${it.label} · ${it.detail}`.slice(0, 80)] });
+        if (!res?.result) toast('Element not found — the page may have changed');
+      } catch {
+        toast('That tab is closed or can’t be scripted anymore');
+      }
     };
   }
-  if (focus) $(`#c-${focus}`)?.scrollIntoView({ block: 'start' });
+  if (focus) document.getElementById(`c-${focus}`)?.scrollIntoView({ block: 'start' }); // focus comes from the URL: not a selector
 }
 
 $('#rescan').onclick = run;

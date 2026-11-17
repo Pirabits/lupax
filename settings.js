@@ -51,7 +51,7 @@ async function render() {
     </section>
     <section class="card group">
       <h2>${icon('bolt')}Keyboard shortcuts</h2>
-      ${shortcuts.filter((s) => s.description).map((s) => row('bolt', esc(s.description), '', `<kbd style="font:700 12px var(--mono);padding:4px 8px;border-radius:6px;background:#f4f1fa;border:1px solid var(--line-2)">${esc(s.shortcut || 'Not set')}</kbd>`)).join('')}
+      ${shortcuts.filter((s) => s.description).map((s) => row('bolt', esc(s.description), '', `<kbd style="font:700 12px var(--mono);padding:4px 8px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line-2)">${esc(s.shortcut || 'Not set')}</kbd>`)).join('')}
       ${row('gear', 'Customize shortcuts', '', `<button class="btn" id="sc">${icon('external')}Open</button>`)}
     </section>
     <section class="card group">

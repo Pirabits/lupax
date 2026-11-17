@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Modern CSS</title>
+<style>
+  /* Tailwind v4-style colors: Chrome reports these as oklch()/lab() in getComputedStyle, not rgb() */
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 40px; color: oklch(0.21 0.03 265); background: oklch(1 0 0); }
+  .cta { display: inline-block; padding: 12px 20px; border: 0; border-radius: 8px; background: oklch(0.546 0.245 262.881); color: oklch(1 0 0); font: inherit; text-decoration: none; }
+  .faint { color: oklch(0.92 0 0); }
+  .glow { height: 24px; box-shadow: 0 4px 12px oklch(0.627 0.194 149.214 / 0.5); background-image: linear-gradient(lab(62 -60 40), oklch(0.7 0.15 30)); }
+</style></head><body>
+<h1>Modern CSS</h1>
+<p><a class="cta" href="#">Get started</a> <button class="cta">Sign up</button></p>
+<p class="faint">Barely visible oklch text</p>
+<!-- elements whose .value is a number, not a string -->
+<progress value="0.7"></progress> <meter value="0.4"></meter>
+<ol><li value="3"></li></ol>
+<div class="glow"></div>
+</body></html>

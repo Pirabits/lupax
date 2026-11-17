@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Accessibility edge cases</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 40px; color: #111; background: #fff; }
+  .hero { position: relative; width: 600px; height: 200px; }
+  .hero img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hero h2 { position: relative; margin: 0; padding: 60px 24px; color: #fff; }
+  .menu { opacity: 0; }
+  .menu a, .faded { color: #ddd; }
+</style></head><body>
+<h1>Edge cases</h1>
+
+<!-- white text over a photo: contrast can't be verified, must not be reported -->
+<div class="hero"><img alt="Night sky" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='200'><rect width='600' height='200' fill='%23123'/></svg>"><h2>Over the photo</h2></div>
+
+<!-- a closed dropdown (opacity on the parent): not visible, must not be checked -->
+<nav class="menu"><a href="#">Hidden menu item</a></nav>
+
+<!-- control: real low-contrast text, must be reported -->
+<p class="faded">Really faded text</p>
+
+<!-- an svg named by its <title>: has a name -->
+<svg role="img" width="40" height="40"><title>Sales chart</title><rect width="40" height="40" fill="#4a9df0"/></svg>
+<!-- role=img that isn't rendered: skipped -->
+<div role="img" style="display:none"></div>
+<!-- inside an aria-hidden subtree: hidden from assistive tech -->
+<div aria-hidden="true"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'/>" width="20" height="20"></div>
+<!-- control: a visible image with no alt, must be reported -->
+<img id="no-alt" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='30' height='30'><rect width='30' height='30'/></svg>" width="30" height="30">
+</body></html>

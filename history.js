@@ -50,7 +50,11 @@ function render() {
       await chrome.downloads.download({ url, filename: `LupaX/${it.name}`, conflictAction: 'uniquify' });
       toast(`Downloading ${it.name}`);
     };
-    card.querySelector('[data-del]').onclick = async () => { await deleteItem(id); items = items.filter((x) => x.id !== id); render(); };
+    card.querySelector('[data-del]').onclick = async () => {
+      // the trash icon sits right next to Download: ask first
+      if (!confirm(`Delete “${items.find((x) => x.id === id)?.name || 'this capture'}”? This can’t be undone.`)) return;
+      await deleteItem(id); items = items.filter((x) => x.id !== id); render();
+    };
   }
 }
 

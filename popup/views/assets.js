@@ -2,7 +2,7 @@ import { icon, hydrateIcons } from '../../lib/icons.js';
 import { bytes, esc } from '../../lib/format.js';
 import { scanAssets, scanA11y } from '../../lib/scan.js';
 import { scoreDonut } from '../../lib/donut.js';
-import { $, $$, view, send, state, toast, copy, menu, loading, inject, pageBase, openPage, registerView } from '../core.js';
+import { $, $$, view, send, state, toast, copy, menu, loading, inject, pageBase, openPage, registerView, restrictedState } from '../core.js';
 
 const aState = { type: 'all', page: 1, per: 12, selected: new Set() };
 const TYPES = [
@@ -22,12 +22,12 @@ registerView('assets', async ({ focus, live }) => {
         <h1 class="v-title">Accessibility Insights</h1>
         <p class="v-sub">Key accessibility checks for this page.</p>
         <div class="scroll" id="a11yBody">${loading('Running checks…')}</div>
-        <div style="padding-top:12px"><button class="cta" id="report" style="height:48px;font-size:15.5px" disabled>${icon('sparkles')}View Detailed Analysis<span class="arrow">${icon('arrowRight')}</span></button></div>
+        <div style="padding-top:12px"><button class="cta" id="report" style="height:48px;font-size:15.5px" disabled>${icon('sparkles')}Full Report<span class="arrow">${icon('arrowRight')}</span></button></div>
       </div>
     </div>`;
   hydrateIcons(view);
-  if (focus === 'a11y') $('.col-r').animate([{ background: '#f6f1ff' }, { background: 'transparent' }], { duration: 1200 });
-  const showErr = (sel) => (e) => { if (live()) $(sel).innerHTML = `<div class="err-box">${esc(e.message)}</div>`; };
+  if (focus === 'a11y') $('.col-r').animate([{ background: 'rgba(122,184,245,.14)' }, { background: 'transparent' }], { duration: 1200 });
+  const showErr = (sel) => (e) => { if (live()) $(sel).innerHTML = state.restricted ? restrictedState() : `<div class="err-box">${esc(e.message)}</div>`; };
   const assetsP = (cache.assets ? Promise.resolve(cache.assets) : inject(scanAssets).then((r) => (cache.assets = r)))
     .then(() => live() && renderAssets()).catch(showErr('#aBody'));
   const a11yP = (cache.a11y ? Promise.resolve(cache.a11y) : inject(scanA11y).then((r) => (cache.a11y = r)))
@@ -44,6 +44,8 @@ function renderAssets() {
   const pageItems = list.slice((aState.page - 1) * aState.per, aState.page * aState.per);
   const totalSize = list.reduce((s, a) => s + (a.size || 0), 0);
   const allSelected = list.length && list.every((a) => aState.selected.has(a.url));
+  // a selection spans every category: exporting from another filter must not drop it
+  const toExport = aState.selected.size ? all.filter((a) => aState.selected.has(a.url)) : list;
 
   const pageBtns = [];
   const addPg = (p) => pageBtns.push(`<button class="pg ${p === aState.page ? 'on' : ''}" data-pg="${p}">${p}</button>`);
@@ -60,7 +62,7 @@ function renderAssets() {
       <label><input type="checkbox" class="cb" id="selAll" ${allSelected ? 'checked' : ''}/>${aState.selected.size ? `${aState.selected.size} selected` : 'Select all'}</label>
       <span class="spacer"></span>
       <span class="sum">${list.length} assets • ${bytes(totalSize)}</span>
-      <button class="btn primary" id="zip" ${list.length ? '' : 'disabled'}>${icon('download')}Export ZIP</button>
+      <button class="btn primary" id="zip" ${toExport.length ? '' : 'disabled'}>${icon('download')}Export ZIP</button>
     </div>
     ${state.cache.assets.truncated ? '<p class="muted" style="margin:0 0 8px;font-size:12px">Large page: only the first 9,000 elements were scanned for background images, so some assets may be missing.</p>' : ''}
     <div class="agrid" id="agrid">${pageItems.map((a, i) => assetCard(a, i)).join('') || '<div class="empty" style="grid-column:1/-1">No assets in this category.</div>'}</div>
@@ -77,7 +79,7 @@ function renderAssets() {
   $$('[data-pg]').forEach((b) => (b.onclick = () => { aState.page = +b.dataset.pg; renderAssets(); $('#agrid').scrollTop = 0; }));
   $('#per').onchange = (e) => { aState.per = +e.target.value; aState.page = 1; renderAssets(); };
   $('#selAll').onchange = (e) => { for (const a of list) e.target.checked ? aState.selected.add(a.url) : aState.selected.delete(a.url); renderAssets(); };
-  $('#zip').onclick = () => exportZip(list.filter((a) => !aState.selected.size || aState.selected.has(a.url)));
+  $('#zip').onclick = () => exportZip(toExport);
   for (const card of $$('.acard')) {
     const a = pageItems[+card.dataset.i];
     $('.cb', card).onchange = (e) => { e.target.checked ? aState.selected.add(a.url) : aState.selected.delete(a.url); renderAssets(); };
@@ -103,7 +105,7 @@ function assetCard(a, i) {
   const checker = a.type !== 'font' && !(a.format === 'jpg' || a.format === 'jpeg');
   return `<div class="card acard ${aState.selected.has(a.url) ? 'sel' : ''}" data-i="${i}">
     <input type="checkbox" class="cb" ${aState.selected.has(a.url) ? 'checked' : ''} />
-    <div class="th ${checker ? 'checker' : ''}" title="${esc(a.url.startsWith('data:') ? a.name : a.url)}" style="${a.type === 'font' ? 'background:#f6f3fb' : ''}">${thumb}</div>
+    <div class="th ${checker ? 'checker' : ''}" title="${esc(a.url.startsWith('data:') ? a.name : a.url)}" style="${a.type === 'font' ? 'background:var(--surface-2)' : ''}">${thumb}</div>
     <div class="inf"><b title="${esc(a.family || a.name)}">${esc(a.name)}</b>
       <div class="row"><span class="badge">${esc(fmt)}</span><span data-size="${esc(a.url)}">${a.size ? bytes(a.size) : a.w ? `${a.w}×${a.h}` : '—'}</span></div></div>
     <button class="icon-btn" data-more>${icon('dots')}</button>

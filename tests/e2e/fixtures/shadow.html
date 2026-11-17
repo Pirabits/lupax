@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Web components</title>
+<style>body { font: 16px/1.5 system-ui, sans-serif; margin: 40px; color: #111; background: #fff; }</style></head><body>
+<h1>Web components</h1>
+<p>Light DOM paragraph with good contrast.</p>
+
+<x-card>
+  <template shadowrootmode="open">
+    <style>.inside-shadow { color: #c9c9c9; font-size: 18px; margin: 0 0 12px; } .photo { width: 120px; height: 80px; }</style>
+    <p class="inside-shadow">Faint text inside a shadow root</p>
+    <img class="photo" src="/logo.svg">
+    <button class="icon-only"></button>
+    <x-badge>
+      <template shadowrootmode="open">
+        <img class="nested" src="/logo.svg?nested" width="40" height="40">
+      </template>
+    </x-badge>
+  </template>
+</x-card>
+</body></html>

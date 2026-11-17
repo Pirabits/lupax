@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Asset edge cases</title></head><body>
+<h1>Assets</h1>
+
+<!-- CDN-style srcset: the URLs themselves contain commas -->
+<picture>
+  <source srcset="/cdn/w_400,c_fill/photo.jpg 400w, /cdn/w_1200,c_fill/photo.jpg 1200w, /cdn/w_800,c_fill/photo.jpg 800w">
+  <img src="/logo.svg" alt="Photo" width="120" height="80">
+</picture>
+
+<!-- a sprite sheet and a shared gradient, defined once and hidden -->
+<svg width="0" height="0" style="position:absolute">
+  <defs><linearGradient id="brand-grad"><stop offset="0" stop-color="#4a9df0"/><stop offset="1" stop-color="#061230"/></linearGradient></defs>
+  <symbol id="ic-star" viewBox="0 0 24 24"><path fill="url(#brand-grad)" d="M12 2l3 7h7l-6 4 2 7-6-4-6 4 2-7-6-4h7z"/></symbol>
+</svg>
+
+<!-- uses the sprite (href) and the old xlink:href form, larger than icon size so they're listed as SVGs -->
+<svg id="sprite-a" width="96" height="96" aria-label="star"><use href="#ic-star"/></svg>
+<svg id="sprite-b" width="96" height="96" aria-label="star-xlink"><use xlink:href="#ic-star"/></svg>
+<!-- text with a non-breaking space -->
+<svg id="nbsp" width="160" height="60" aria-label="label"><rect width="160" height="60" fill="#eee"/><text x="10" y="35">A&nbsp;B</text></svg>
+</body></html>

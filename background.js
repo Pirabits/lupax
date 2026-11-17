@@ -8,14 +8,21 @@ import { thumbnail } from './lib/thumb.js';
 // Chrome limits captureVisibleTab to ~2 calls/second.
 const CAPTURE_GAP_MS = 550;
 const MAX_DIM = 32000;
-const MAX_AREA = 250_000_000;
+// Pixels in one stitched capture. The canvas, the PNG decode for the thumbnail and a JPG/PDF conversion each hold a
+// full RGBA copy (4 bytes/px), so 100 MP is ~400 MB per copy; 250 MP risked the worker being killed with no error.
+const MAX_AREA = 100_000_000;
 // Clipboard images travel to the page as base64 script arguments; past this size we skip the copy and say so.
 const CLIPBOARD_MAX_BYTES = 20 * 1024 * 1024;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const RECORDING_CANCELLED = 'Recording cancelled'; // also thrown by offscreen.js begin()
 
 // ───────────────────────────── routing ─────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Only the extension's own pages (popup, history, report, offscreen, recorder) talk to the worker; code injected
+  // into web pages never sends messages. Ignoring everything else means a compromised page renderer can't drive
+  // captures or make the worker fetch arbitrary URLs with the extension's host access.
+  if (!sender.url?.startsWith(chrome.runtime.getURL(''))) return;
   if (msg?.target) return; // addressed to offscreen / recorder
   if (msg?.type === 'recording-started') {
     // the recorder window waits for this answer and only starts recording when the slot is granted
@@ -40,10 +47,16 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
 // Chunks left by a recording that never finished (browser crash, closed offscreen document) become history items.
 chrome.runtime.onStartup.addListener(() => recoverOrphanRecordings().catch(reportError));
+// an update or reload ends any recording mid-way; its chunks would otherwise wait for the next browser launch
+chrome.runtime.onInstalled.addListener(() => recoverOrphanRecordings().catch(reportError));
 
 chrome.windows.onRemoved.addListener(async (windowId) => {
   const rec = await getRecording();
-  if (rec && rec.kind === 'desktop' && rec.windowId === windowId) await clearRecording();
+  if (!rec || rec.kind !== 'desktop' || rec.windowId !== windowId) return;
+  // the recorder window was closed (its beforeunload prompt only shows after user interaction): keep what it recorded
+  await clearRecording();
+  const [id] = await recoverOrphanRecordings().catch((e) => { reportError(e); return []; });
+  if (id) await openViewer(id, undefined, 'The recorder window was closed, so the recording stopped there. This is everything recorded until then.');
 });
 
 async function handle(msg) {
@@ -96,19 +109,34 @@ async function inject(tabId, func, args = []) {
 
 // ───────────────────────────── screenshots ─────────────────────────────
 
+// One capture at a time: two scroll-and-stitch runs on the same tab would capture each other's scroll
+// positions and restore each other's hidden sticky headers. Kept in memory: a capture keeps the worker alive.
+let capturing = false;
+
 async function runCapture(tab, mode, delay) {
+  if (mode === 'desktop') return openRecorderWindow('screenshot');
+  if (capturing) throw new Error('A capture is already in progress');
+  capturing = true;
+  try {
+    return await runCaptureMode(tab, mode, delay);
+  } finally {
+    capturing = false;
+  }
+}
+
+async function runCaptureMode(tab, mode, delay) {
   const s = (await getSettings()).capture;
   delay ??= s.delay;
   switch (mode) {
     case 'visible':
-      return finishCapture(await dataUrlToBlob(await captureTab(tab.windowId)), tab);
+      return finishCapture(await dataUrlToBlob(await captureTabOf(tab)), tab);
     case 'delayed':
       await countdown(tab, delay);
-      return finishCapture(await dataUrlToBlob(await captureTab(tab.windowId)), tab);
+      return finishCapture(await dataUrlToBlob(await captureTabOf(tab)), tab);
     case 'area': {
       const r = await inject(tab.id, selectRegion, ['area']);
       if (!r) return;
-      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTab(tab.windowId)));
+      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTabOf(tab)));
       const k = bmp.width / r.innerWidth;
       const c = new OffscreenCanvas(Math.max(1, Math.round(r.w * k)), Math.max(1, Math.round(r.h * k)));
       c.getContext('2d').drawImage(bmp, r.x * k, r.y * k, r.w * k, r.h * k, 0, 0, c.width, c.height);
@@ -127,16 +155,30 @@ async function runCapture(tab, mode, delay) {
     }
     case 'full':
       return captureRegion(tab, null, { hideFixed: s.hideFixed });
-    case 'desktop':
-      return openRecorderWindow('screenshot');
   }
+}
+
+/** captureVisibleTab captures whatever tab is in front of the window: refuse once the user has switched away. */
+async function assertInFront(tab) {
+  const now = await chrome.tabs.get(tab.id).catch(() => null);
+  if (!now?.active) throw new Error('Capture stopped because you switched tabs. Keep the page in front until the capture finishes.');
+}
+async function captureTabOf(tab) {
+  await assertInFront(tab);
+  let shot, error;
+  try { shot = await captureTab(tab.windowId); } catch (e) { error = e; }
+  // checked again afterwards: a switch during the capture means the shot shows (or failed on) the other tab
+  await assertInFront(tab);
+  if (error) throw error;
+  return shot;
 }
 
 let lastCaptureAt = 0;
 async function captureTab(windowId) {
-  const wait = lastCaptureAt + CAPTURE_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  lastCaptureAt = Date.now();
+  // reserve the slot before waiting, so concurrent callers (capture + color picker) queue instead of colliding
+  const at = Math.max(Date.now(), lastCaptureAt + CAPTURE_GAP_MS);
+  lastCaptureAt = at;
+  if (at > Date.now()) await sleep(at - Date.now());
   return chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
 }
 
@@ -155,14 +197,16 @@ async function captureRegion(tab, rect, { hideFixed }) {
     const xs = steps(rect.x, rect.w, m.vw), ys = steps(rect.y, rect.h, m.vh);
     const multi = xs.length * ys.length > 1;
     if (multi) await setProgressBadge(0, xs.length * ys.length);
-    let canvas, ctx, scale, out, hidden = false, n = 0;
+    let canvas, ctx, scale, out, notice, hidden = false, n = 0;
     for (const y of ys) for (const x of xs) {
+      await assertInFront(tab); // before scrolling: a background tab would be scrolled and then captured as the wrong tab
       const pos = await inject(tabId, scrollToPos, [x, y]);
-      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTab(tab.windowId)));
+      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTabOf(tab)));
       if (!canvas) {
         scale = bmp.width / m.innerW;
         const W = rect.w * scale, H = rect.h * scale;
         out = Math.min(1, MAX_DIM / W, MAX_DIM / H, Math.sqrt(MAX_AREA / (W * H)));
+        if (out < 1) notice = `This page is very long, so it was captured at ${Math.round(out * 100)}% scale.`;
         canvas = new OffscreenCanvas(Math.max(1, Math.round(W * out)), Math.max(1, Math.round(H * out)));
         ctx = canvas.getContext('2d');
       }
@@ -178,14 +222,14 @@ async function captureRegion(tab, rect, { hideFixed }) {
       if (multi && hideFixed && !hidden) { await inject(tabId, toggleFixed, [true]); hidden = true; }
     }
     await chrome.action.setBadgeText({ text: '' });
-    await finishCapture(await canvas.convertToBlob({ type: 'image/png' }), tab);
+    await finishCapture(await canvas.convertToBlob({ type: 'image/png' }), tab, { notice });
   } finally {
     await inject(tabId, pageRestore, [m.sx, m.sy]).catch(() => {});
   }
 }
 
 async function setProgressBadge(n, total) {
-  await chrome.action.setBadgeBackgroundColor({ color: '#7241ff' });
+  await chrome.action.setBadgeBackgroundColor({ color: '#2b78d0' });
   await chrome.action.setBadgeText({ text: `${Math.round((n / total) * 100)}%` });
 }
 
@@ -204,7 +248,7 @@ async function finishCapture(png, tab, meta = {}) {
   if (s.annotate) {
     // editor exports to the chosen type/destination when the user saves
     const id = await putItem({ ...common, format: 'png', name: `${base}.png`, blob: png, pending: true });
-    return openViewer(id, tab);
+    return openViewer(id, tab, meta.notice);
   }
 
   let blob = png, ext = 'png';
@@ -213,10 +257,10 @@ async function finishCapture(png, tab, meta = {}) {
   const name = `${base}.${ext}`;
   const id = await putItem({ ...common, format: ext, name, blob, preview: ext === 'png' ? undefined : png });
 
-  if (s.destination === 'none') return openViewer(id, tab);
+  if (s.destination === 'none') return openViewer(id, tab, meta.notice);
   await downloadItem(id, `LupaX/${name}`, s.destination === 'ask');
   const note = copied === true ? ' · copied to clipboard' : copied === 'too-large' ? ' · too large to copy to clipboard' : copied === false ? ' · clipboard copy failed' : '';
-  if (tab) inject(tab.id, pageToast, [`Saved ${name}${note}`]).catch(() => {});
+  if (tab) inject(tab.id, pageToast, [`Saved ${name}${note}${meta.notice ? ` · ${meta.notice}` : ''}`]).catch(() => {});
 }
 
 /** Download a stored item. The service worker can't make blob: URLs, so the offscreen document does. */
@@ -260,7 +304,7 @@ async function countdown(tab, secs) {
   if (!secs) return;
   const shown = await inject(tab.id, showCountdown, [secs]).catch(() => false);
   if (shown) return;
-  await chrome.action.setBadgeBackgroundColor({ color: '#7241ff' });
+  await chrome.action.setBadgeBackgroundColor({ color: '#2b78d0' });
   for (let i = secs; i > 0; i--) { await chrome.action.setBadgeText({ text: String(i) }); await sleep(1000); }
   await chrome.action.setBadgeText({ text: '' });
 }
@@ -273,28 +317,48 @@ const getRecording = async () => (await chrome.storage.session.get('recording'))
 async function liveRecording() {
   const rec = await getRecording();
   if (!rec) return null;
-  const alive = rec.kind === 'tab'
-    ? (await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length > 0
-    : await chrome.windows.get(rec.windowId).then(() => true, () => false);
+  const alive = rec.kind === 'tab' ? await tabRecorderAlive(rec) : await chrome.windows.get(rec.windowId).then(() => true, () => false);
   if (alive) return rec;
   await clearRecording();
   await recoverOrphanRecordings().catch(() => {});
   return null;
 }
+const TAB_START_TIMEOUT_MS = 60_000; // stream setup + the longest countdown, with a wide margin
+
+async function tabRecorderAlive(rec) {
+  if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length) return false;
+  // still setting up: the offscreen document has nothing to report yet (a worker that died mid-start times out)
+  if (rec.starting) return Date.now() - rec.startedAt < TAB_START_TIMEOUT_MS;
+  // the document also serves downloads and is recreated for them, so its existence alone proves nothing:
+  // after a crash mid-recording, a new download document would otherwise hold the slot until the browser restarts
+  const st = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'status' }).catch(() => null);
+  return !!st?.recording;
+}
+
+/** Check-and-reserve the recording slot one caller at a time: two starts (shortcut + popup) used to both pass the check. */
+let slotQueue = Promise.resolve();
+function reserveSlot(fn) {
+  const p = slotQueue.then(fn);
+  slotQueue = p.catch(() => {});
+  return p;
+}
+
 async function clearRecording() { await chrome.storage.session.remove('recording'); await setRecBadge(false); }
 async function setRecBadge(on) {
   await chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
   await chrome.action.setBadgeText({ text: on ? 'REC' : '' });
 }
 
+let offscreenCreating = null; // concurrent callers (a download during a recording start) share one createDocument
 async function ensureOffscreen() {
   const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
   if (ctx.length) return;
-  await chrome.offscreen.createDocument({
+  offscreenCreating ??= chrome.offscreen.createDocument({
     url: 'offscreen.html',
     reasons: ['USER_MEDIA', 'BLOBS'],
     justification: 'Record the current tab with MediaRecorder and create blob URLs for downloads',
-  });
+  }).finally(() => { offscreenCreating = null; });
+  await offscreenCreating;
 }
 
 /** Close the offscreen document unless it is recording or still serving a download URL. */
@@ -309,12 +373,13 @@ async function closeOffscreenIfIdle() {
 /** tab: the tab to record; defaults to the active tab, looked up only after the recording slot is known to be free. */
 async function startRecording(options, tab) {
   if (options.source !== 'tab') return openRecorderWindow('video', options.source);
-  if (await liveRecording()) throw new Error('A recording is already in progress');
-  tab ??= await activeTab();
-
-  await ensureOffscreen();
-  // reserve the slot now: setup and countdown take seconds, and nothing else may start a recording meanwhile
-  await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
+  await reserveSlot(async () => {
+    if (await liveRecording()) throw new Error('A recording is already in progress');
+    tab ??= await activeTab();
+    await ensureOffscreen();
+    // reserve the slot now: setup and countdown take seconds, and nothing else may start a recording meanwhile
+    await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
+  });
   try {
     // stream id must be requested while the user gesture is still fresh
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
@@ -323,8 +388,9 @@ async function startRecording(options, tab) {
       target: 'offscreen', type: 'prepare', streamId, options,
       meta: { title: tab.title, url: tab.url, name: baseName(tab.title, tab.url) },
     });
-    if (!res?.ok) throw new Error(res?.error || 'Could not start recording');
+    if (!res?.ok) throw Object.assign(new Error(res?.error || 'Could not start recording'), { name: res?.errorName || 'Error', device: res?.device });
     if (options.countdown) await inject(tab.id, showCountdown, [options.countdown]).catch(() => sleep(options.countdown * 1000));
+    if ((await getRecording())?.cancelled) throw new Error(RECORDING_CANCELLED);
     const go = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'begin' });
     if (!go?.ok) throw new Error(go?.error || 'Could not start recording');
   } catch (e) {
@@ -332,6 +398,14 @@ async function startRecording(options, tab) {
     await chrome.runtime.sendMessage({ target: 'offscreen', type: 'reset' }).catch(() => {});
     await clearRecording();
     await closeOffscreenIfIdle();
+    if (e?.message === RECORDING_CANCELLED) return; // stopped during setup or countdown: nothing to report
+    // the offscreen document can't show permission prompts; the popup sends people to the grant page first, but the
+    // record shortcut doesn't go through the popup
+    if (e?.device && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+      const need = [options.mic && 'microphone', options.webcam && 'camera'].filter(Boolean).join(',');
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`permissions.html?need=${need}`) });
+      return;
+    }
     throw e;
   }
   await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, startedAt: Date.now(), pausedTotal: 0 } });
@@ -344,6 +418,12 @@ async function stopRecording() {
   if (!rec) return;
   // still in the screen picker or countdown: closing the recorder window cancels it (onRemoved frees the slot)
   if (rec.starting && rec.kind === 'desktop') return chrome.windows.remove(rec.windowId).catch(() => {});
+  if (rec.starting) {
+    // still setting up or counting down: startRecording checks this flag before it begins, and the offscreen document
+    // abandons a prepared recording on stop
+    await chrome.storage.session.set({ recording: { ...rec, cancelled: true } });
+    inject(rec.tabId, removeCountdown).catch(() => {});
+  }
   await chrome.runtime.sendMessage({ target: rec.kind === 'tab' ? 'offscreen' : 'recorder', type: 'stop' }).catch(() => {});
 }
 
@@ -363,22 +443,29 @@ async function endRecordingFx() {
 }
 
 async function openRecorderWindow(mode, source = 'desktop') {
-  if (mode === 'video' && (await liveRecording())) throw new Error('A recording is already in progress');
+  if (mode !== 'video') return openRecorderPopup(mode, source);
+  await reserveSlot(async () => {
+    if (await liveRecording()) throw new Error('A recording is already in progress');
+    const created = await openRecorderPopup(mode, source);
+    // the picker and countdown take a while; hold the slot for this window so no other recording starts meanwhile
+    await chrome.storage.session.set({ recording: { kind: 'desktop', source, windowId: created.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
+  });
+}
+
+async function openRecorderPopup(mode, source) {
   const win = await chrome.windows.getLastFocused().catch(() => null);
   const w = 400, h = 340;
-  const created = await chrome.windows.create({
+  return chrome.windows.create({
     url: chrome.runtime.getURL(`recorder.html?mode=${mode}&source=${source}`),
     type: 'popup', width: w, height: h, focused: true,
     ...(win ? { left: Math.round(win.left + (win.width - w) / 2), top: Math.round(win.top + 80) } : {}),
   });
-  // the picker and countdown take a while; hold the slot for this window so no other recording starts meanwhile
-  if (mode === 'video') await chrome.storage.session.set({ recording: { kind: 'desktop', source, windowId: created.id, starting: true, startedAt: Date.now(), pausedTotal: 0 } });
 }
 
 // ───────────────────────────── color picker & inspector ─────────────────────────────
 
 async function pickColor(tab) {
-  const dataUrl = await captureTab(tab.windowId);
+  const dataUrl = await captureTabOf(tab);
   const hex = await inject(tab.id, pickerOverlay, [dataUrl]);
   if (!hex) return;
   const { colorHistory = [] } = await chrome.storage.local.get('colorHistory');
@@ -409,6 +496,7 @@ async function exportAssetsZip({ assets, title, url }, tab) {
     while (next < assets.length) {
       const i = next++;
       try {
+        if (!/^(https?|data):/i.test(assets[i].url)) throw new Error('unsupported URL'); // e.g. blob: (page-only), file:
         const res = await fetch(assets[i].url, { signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS) });
         if (res.ok) results[i] = { name: assetZipPath(assets[i]), data: new Uint8Array(await res.arrayBuffer()) };
       } catch { /* unreachable or timed out: skip */ }
@@ -428,9 +516,22 @@ async function exportAssetsZip({ assets, title, url }, tab) {
 
 // ───────────────────────────── errors ─────────────────────────────
 
+/** Chrome's messages for pages extensions can't touch are cryptic ("Cannot access contents of url …"): say what it means. */
+function friendlyError(message) {
+  if (/file:\/\//i.test(message) && /cannot access|permission/i.test(message)) {
+    return 'LupaX can’t read local files yet. Turn on “Allow access to file URLs” for LupaX in chrome://extensions.';
+  }
+  if (/cannot access (a |contents of )|cannot be scripted|extensions gallery|missing host permission|'activeTab' permission|cannot capture/i.test(message)) {
+    return 'Chrome doesn’t let extensions capture or read this page (browser pages, the Web Store, the PDF viewer).';
+  }
+  return message;
+}
+
+let errorSeq = 0; // only the latest error's timer may clear the badge, or an older one wipes a newer message early
 async function reportError(err) {
   console.error('[LupaX]', err);
-  const message = err?.message || String(err);
+  const seq = ++errorSeq;
+  const message = friendlyError(err?.message || String(err));
   await chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
   await chrome.action.setBadgeText({ text: '!' });
   await chrome.action.setTitle({ title: `LupaX — ${message}` });
@@ -438,6 +539,7 @@ async function reportError(err) {
   const tab = await activeTab().catch(() => null);
   if (tab) inject(tab.id, pageToast, [message, 'error']).catch(() => {});
   setTimeout(async () => {
+    if (seq !== errorSeq) return;
     if (!(await getRecording())) await chrome.action.setBadgeText({ text: '' });
     await chrome.action.setTitle({ title: 'LupaX' });
   }, 5000);
@@ -461,7 +563,13 @@ function pagePrep() {
 
 function scrollToPos(x, y) {
   window.scrollTo(x, y);
-  return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => r({ x: scrollX, y: scrollY }), 150))));
+  // wait two frames for the page to paint; background tabs get no animation frames, so a timer settles it regardless
+  return new Promise((r) => {
+    let done = false;
+    const settle = () => { if (!done) { done = true; r({ x: scrollX, y: scrollY }); } };
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(settle, 150)));
+    setTimeout(settle, 1000);
+  });
 }
 
 function toggleFixed(hide) {
@@ -501,8 +609,8 @@ function pageToast(text, kind = 'ok') {
   host.dataset.lupaxToast = kind;
   host.style.cssText = 'all:initial;position:fixed;z-index:2147483647;left:50%;bottom:28px;transform:translateX(-50%)';
   const sh = host.attachShadow({ mode: 'closed' });
-  sh.innerHTML = `<style>div{font:600 13px/1 system-ui,sans-serif;color:#fff;background:#17122b;padding:12px 16px 12px 14px;border-radius:12px;display:flex;gap:10px;align-items:center;box-shadow:0 10px 30px rgba(20,10,50,.35);animation:in .2s ease-out}
-    i{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#7241ff,#ff7a8a);display:grid;place-items:center;color:#fff;font-style:normal;font-size:11px;flex:none}
+  sh.innerHTML = `<style>div{font:600 13px/1 system-ui,sans-serif;color:#fff;background:#061230;padding:12px 16px 12px 14px;border-radius:12px;display:flex;gap:10px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:in .2s ease-out}
+    i{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#7ab8f5,#3d8ee6);display:grid;place-items:center;color:#061230;font-style:normal;font-size:11px;flex:none}
     i.err{background:#ef4444} span{max-width:520px;line-height:1.35}
     @keyframes in{from{opacity:0;transform:translateY(8px)}}</style><div><i></i><span></span></div>`;
   const err = kind === 'error';
@@ -517,13 +625,14 @@ function pageToast(text, kind = 'ok') {
 function showCountdown(secs) {
   return new Promise((resolve) => {
     const host = document.createElement('div');
+    host.dataset.lupaxCountdown = '';
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none';
     const sh = host.attachShadow({ mode: 'closed' });
     sh.innerHTML = `<style>
-      .w{position:fixed;inset:0;display:grid;place-items:center;background:rgba(23,18,43,.18)}
-      .c{width:150px;height:150px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.95);box-shadow:0 20px 60px rgba(60,30,140,.35);position:relative}
-      .c::before{content:'';position:absolute;inset:-6px;border-radius:50%;background:conic-gradient(#7241ff,#c04bff,#ff8a7a,#7241ff);z-index:-1}
-      b{font:800 72px/1 system-ui,sans-serif;background:linear-gradient(135deg,#6a37ff,#e45bd0);-webkit-background-clip:text;color:transparent;animation:p 1s ease-out infinite}
+      .w{position:fixed;inset:0;display:grid;place-items:center;background:rgba(6,18,48,.25)}
+      .c{width:150px;height:150px;border-radius:50%;display:grid;place-items:center;background:#061230;box-shadow:0 20px 60px rgba(0,0,0,.4);position:relative}
+      .c::before{content:'';position:absolute;inset:-6px;border-radius:50%;background:conic-gradient(#3d8ee6,#7ab8f5,#cfe6ff,#3d8ee6);z-index:-1}
+      b{font:800 72px/1 system-ui,sans-serif;background:linear-gradient(135deg,#7ab8f5,#cfe6ff);-webkit-background-clip:text;color:transparent;animation:p 1s ease-out infinite}
       @keyframes p{0%{transform:scale(1.25);opacity:.4}30%{transform:scale(1);opacity:1}}
     </style><div class="w"><div class="c"><b></b></div></div>`;
     const b = sh.querySelector('b');
@@ -538,6 +647,11 @@ function showCountdown(secs) {
   });
 }
 
+function removeCountdown() {
+  for (const el of document.querySelectorAll('[data-lupax-countdown]')) el.remove();
+  return true;
+}
+
 function cursorFx(on) {
   window.__ixCursor?.remove();
   window.__ixCursor = null;
@@ -547,7 +661,7 @@ function cursorFx(on) {
   const sh = host.attachShadow({ mode: 'closed' });
   sh.innerHTML = `<style>
     .halo{position:fixed;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;background:rgba(255,214,70,.35);box-shadow:0 0 0 2px rgba(255,190,40,.55);transition:transform .08s;left:-100px;top:-100px}
-    .ring{position:fixed;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:3px solid #7241ff;animation:r .5s ease-out forwards}
+    .ring{position:fixed;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:3px solid #4a9df0;animation:r .5s ease-out forwards}
     @keyframes r{to{transform:scale(3.4);opacity:0}}
   </style><div class="halo"></div>`;
   const halo = sh.querySelector('.halo');
@@ -580,16 +694,16 @@ function selectRegion(mode) {
     host.style.cssText = `all:initial;position:fixed;inset:0;z-index:2147483647;${mode === 'element' ? 'pointer-events:none;' : ''}`;
     const sh = host.attachShadow({ mode: 'closed' });
     sh.innerHTML = `<style>
-      .layer{position:fixed;inset:0;cursor:crosshair;background:rgba(23,18,43,.32)}
+      .layer{position:fixed;inset:0;cursor:crosshair;background:rgba(6,18,48,.32)}
       .layer.dragging{background:transparent}
       .el .layer{display:none}
-      .box{position:fixed;display:none;outline:2px solid #7241ff;box-shadow:0 0 0 100vmax rgba(23,18,43,.42);pointer-events:none}
-      .el .box{box-shadow:none;background:rgba(114,65,255,.12);transition:all .06s ease-out}
-      .h{position:absolute;width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid #7241ff;margin:-6.5px 0 0 -6.5px}
-      .size{position:absolute;left:-2px;top:calc(100% + 6px);font:600 12px/1 system-ui,sans-serif;color:#fff;background:#7241ff;padding:5px 8px;border-radius:5px;white-space:nowrap;display:flex;gap:5px;align-items:center}
+      .box{position:fixed;display:none;outline:2px solid #4a9df0;box-shadow:0 0 0 100vmax rgba(6,18,48,.42);pointer-events:none}
+      .el .box{box-shadow:none;background:rgba(74,157,240,.12);transition:all .06s ease-out}
+      .h{position:absolute;width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid #4a9df0;margin:-6.5px 0 0 -6.5px}
+      .size{position:absolute;left:-2px;top:calc(100% + 6px);font:600 12px/1 system-ui,sans-serif;color:#fff;background:#4a9df0;padding:5px 8px;border-radius:5px;white-space:nowrap;display:flex;gap:5px;align-items:center}
       .size::before{content:'✦';font-size:10px}
-      .hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);font:600 13px/1.2 system-ui,sans-serif;color:#fff;background:rgba(23,18,43,.92);padding:9px 16px;border-radius:999px;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.25);white-space:nowrap;display:flex;gap:8px;align-items:center}
-      .hint i{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,#7241ff,#ff7a8a)}
+      .hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);font:600 13px/1.2 system-ui,sans-serif;color:#fff;background:rgba(6,18,48,.92);padding:9px 16px;border-radius:999px;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.25);white-space:nowrap;display:flex;gap:8px;align-items:center}
+      .hint i{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,#7ab8f5,#3d8ee6)}
     </style>
     <div class="root ${mode === 'element' ? 'el' : ''}"><div class="layer"></div>
       <div class="box"><span class="h" style="left:0;top:0"></span><span class="h" style="left:100%;top:0"></span><span class="h" style="left:0;top:100%"></span><span class="h" style="left:100%;top:100%"></span><span class="size"></span></div>
@@ -702,11 +816,11 @@ function pickerOverlay(dataUrl) {
       const sh = host.attachShadow({ mode: 'closed' });
       sh.innerHTML = `<style>
         .ov{position:fixed;inset:0;cursor:crosshair}
-        .loupe{position:fixed;width:${SIZE}px;height:${SIZE}px;border-radius:50%;overflow:hidden;border:3px solid #fff;box-shadow:0 0 0 2px #7241ff,0 10px 30px rgba(60,30,140,.4);pointer-events:none}
+        .loupe{position:fixed;width:${SIZE}px;height:${SIZE}px;border-radius:50%;overflow:hidden;border:3px solid #fff;box-shadow:0 0 0 2px #4a9df0,0 10px 30px rgba(0,0,0,.4);pointer-events:none}
         canvas{display:block}
-        .lbl{position:fixed;pointer-events:none;font:700 12px/1 ui-monospace,Menlo,monospace;background:#17122b;color:#fff;padding:7px 9px;border-radius:8px;display:flex;gap:7px;align-items:center;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+        .lbl{position:fixed;pointer-events:none;font:700 12px/1 ui-monospace,Menlo,monospace;background:#061230;color:#fff;padding:7px 9px;border-radius:8px;display:flex;gap:7px;align-items:center;box-shadow:0 6px 18px rgba(0,0,0,.3)}
         .sw{width:13px;height:13px;border-radius:4px;border:1px solid rgba(255,255,255,.7)}
-        .hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);font:600 13px/1.2 system-ui,sans-serif;color:#fff;background:rgba(23,18,43,.92);padding:9px 16px;border-radius:999px;pointer-events:none}
+        .hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);font:600 13px/1.2 system-ui,sans-serif;color:#fff;background:rgba(6,18,48,.92);padding:9px 16px;border-radius:999px;pointer-events:none}
       </style>
       <div class="ov"></div><div class="loupe"><canvas width="${SIZE}" height="${SIZE}"></canvas></div>
       <div class="lbl"><span class="sw"></span><span class="hex"></span></div>
@@ -758,7 +872,7 @@ function pickerOverlay(dataUrl) {
         (navigator.clipboard?.writeText(hex) ?? Promise.reject()).catch(fallback);
         const t = document.createElement('div');
         t.textContent = `Copied ${hex}`;
-        t.style.cssText = `all:initial;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:2147483647;font:600 13px system-ui,sans-serif;color:#fff;background:#17122b;padding:11px 15px;border-radius:10px;border-left:16px solid ${hex};box-shadow:0 8px 24px rgba(0,0,0,.3)`;
+        t.style.cssText = `all:initial;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:2147483647;font:600 13px system-ui,sans-serif;color:#fff;background:#061230;padding:11px 15px;border-radius:10px;border-left:16px solid ${hex};box-shadow:0 8px 24px rgba(0,0,0,.3)`;
         document.documentElement.appendChild(t);
         setTimeout(() => t.remove(), 1600);
         done(hex);

@@ -77,3 +77,13 @@ test('cssFor omits defaults', () => {
     'font-family: Arial;\nfont-size: 11px;\nfont-weight: 400;\nline-height: normal;');
   assert.match(cssFor({ family: 'A', size: '1px', weight: '1', lineHeight: '1', letterSpacing: '2px', transform: 'uppercase', color: '#000' }), /letter-spacing: 2px;\ntext-transform: uppercase;\ncolor: #000;/);
 });
+
+test('Tailwind export cannot be broken out of by a hostile page URL', () => {
+  for (const url of ['https://evil.test/a*/globalThis.pwned=1;/*', 'https://evil.test/#\u2028globalThis.pwned=1', 'https://evil.test/#\nglobalThis.pwned=1']) {
+    delete globalThis.pwned;
+    const mod = { exports: null };
+    new Function('module', tokensTailwind({ ...scan, url }))(mod);
+    assert.equal(globalThis.pwned, undefined, `page URL ran as code: ${JSON.stringify(url)}`);
+    assert.equal(mod.exports.theme.extend.colors.primary, '#7241FF');
+  }
+});

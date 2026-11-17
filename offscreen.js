@@ -8,14 +8,16 @@ import { composeWithCamera } from './lib/compose.js';
 import { chunkSink, stoppedEarlyNotice } from './lib/record-sink.js';
 
 const BLOB_URL_TTL_MS = 120_000;
+const CANCELLED = 'Recording cancelled'; // matched in background.js: a stop during the countdown is not an error
 let rec = null; // { recorder, sink, meta, thumb, release }
+let saving = 0; // recordings stopped but still being written to history
 const blobUrls = new Set();
 
 chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
   if (msg?.target !== 'offscreen') return;
   const reply = (p) => p.then(
     (value) => sendResponse({ ok: true, ...value }),
-    (e) => sendResponse({ ok: false, error: e?.message || String(e) }),
+    (e) => sendResponse({ ok: false, error: e?.message || String(e), errorName: e?.name, device: e?.device }),
   );
   switch (msg.type) {
     case 'prepare': reply(prepare(msg)); return true;
@@ -24,7 +26,7 @@ chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
     case 'pause': rec?.recorder?.state === 'recording' && rec.recorder.pause(); sendResponse({ ok: true }); break;
     case 'resume': rec?.recorder?.state === 'paused' && rec.recorder.resume(); sendResponse({ ok: true }); break;
     case 'stop': stop(); sendResponse({ ok: true }); break;
-    case 'status': sendResponse({ ok: true, recording: !!rec, blobUrls: blobUrls.size }); break;
+    case 'status': sendResponse({ ok: true, recording: !!rec || saving > 0, blobUrls: blobUrls.size }); break;
     case 'blob-url': reply(blobUrl(msg.id)); return true;
   }
 });
@@ -56,14 +58,14 @@ async function prepare({ streamId, options, meta }) {
     if (options.systemAudio) tabAudio.connect(dest);
 
     if (options.mic) {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).catch((e) => { throw tagDevice(e, 'microphone'); });
       streams.push(mic);
       audioCtx.createMediaStreamSource(mic).connect(dest);
     }
 
     let videoTrack = tabStream.getVideoTracks()[0];
     if (options.webcam) {
-      const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: options.fps || 30 } });
+      const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: options.fps || 30 } }).catch((e) => { throw tagDevice(e, 'camera'); });
       streams.push(cam);
       composer = composeWithCamera(videoTrack, cam.getVideoTracks()[0], { position: options.webcamPosition });
       videoTrack = composer.track;
@@ -82,6 +84,12 @@ async function prepare({ streamId, options, meta }) {
   }
 }
 
+/** Mark which optional device failed, so the worker can tell a missing mic/camera grant from a tab capture failure. */
+function tagDevice(e, device) {
+  try { e.device = device; } catch {}
+  return e;
+}
+
 async function grabThumb(track) {
   try {
     return await thumbnail(await new ImageCapture(track).grabFrame());
@@ -92,11 +100,15 @@ async function grabThumb(track) {
 
 async function begin() {
   if (!rec) throw new Error('Recording was not prepared');
+  if (rec.cancelled) { reset(); throw new Error(CANCELLED); }
   rec.recorder.start(1000);
 }
 
 function stop() {
-  if (rec?.recorder && rec.recorder.state !== 'inactive') rec.recorder.stop();
+  if (!rec) return;
+  // prepared but not started (countdown), e.g. the tab was closed: begin() abandons it instead of recording
+  if (rec.recorder.state === 'inactive') rec.cancelled = true;
+  else rec.recorder.stop();
 }
 
 /** Abandon a prepared or running recording without saving it. */
@@ -114,12 +126,15 @@ async function save() {
   const r = rec;
   if (!r) return;
   rec = null;
+  saving++;
   r.release();
   try {
     const { id, error } = await r.sink.save({ kind: 'video', format: 'webm', name: `${r.meta.name || 'recording'}.webm`, thumb: r.thumb, title: r.meta.title, url: r.meta.url });
     chrome.runtime.sendMessage({ type: 'recording-saved', id, notice: stoppedEarlyNotice(error) });
   } catch (e) {
     chrome.runtime.sendMessage({ type: 'recording-failed', error: e?.message || String(e) });
+  } finally {
+    saving--;
   }
 }
 

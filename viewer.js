@@ -1,5 +1,5 @@
 import { icon, hydrateIcons } from './lib/icons.js';
-import { getItem, updateItem, deleteItem } from './lib/db.js';
+import { getItem, putItem, updateItem, deleteItem } from './lib/db.js';
 import { getSettings } from './lib/settings.js';
 import { bytes, esc } from './lib/format.js';
 import { thumbnail } from './lib/thumb.js';
@@ -60,7 +60,13 @@ function videoView() {
   v.onloadedmetadata = () => { $('#dims').textContent = `${v.videoWidth}×${v.videoHeight} · ${bytes(item.blob.size)}`; };
   $('#stage').appendChild(v);
   actionBtn(`${icon('download')}Download WebM`, 'primary', () => download(item.blob, item.name));
-  actionBtn(`${icon('trash')}Delete`, 'danger', async () => { await deleteItem(id); window.close(); });
+  actionBtn(`${icon('trash')}Delete`, 'danger', () => confirmDelete());
+}
+
+async function confirmDelete() {
+  if (!confirm(`Delete “${item.name}”? This can’t be undone.`)) return;
+  await deleteItem(id);
+  window.close();
 }
 
 async function fileView() {
@@ -75,7 +81,7 @@ async function fileView() {
     $('#stage').innerHTML = `<div class="card file-card"><span class="tile">${icon(item.format === 'zip' ? 'zip' : 'layers')}</span><b>${esc(item.name)}</b><span class="muted">${bytes(item.blob.size)}</span></div>`;
   }
   actionBtn(`${icon('download')}Download`, 'primary', () => download(item.blob, item.name));
-  actionBtn(`${icon('trash')}Delete`, 'danger', async () => { await deleteItem(id); window.close(); });
+  actionBtn(`${icon('trash')}Delete`, 'danger', () => confirmDelete());
 }
 
 // ───────────────────────────── image editor ─────────────────────────────
@@ -96,12 +102,16 @@ async function imageEditor() {
     ['arrow', 'arrowTool', 'Arrow (A)', 'a'], ['line', 'line', 'Line (L)', 'l'], ['rect', 'rect', 'Rectangle (R)', 'r'],
     ['ellipse', 'ellipse', 'Ellipse (O)', 'o'], ['text', 'text', 'Text (T)', 't'], ['blur', 'blur', 'Blur / pixelate (B)', 'b'], ['crop', 'crop', 'Crop (C)', 'c'],
   ];
-  const COLORS = ['#7241FF', '#FF4D4F', '#FF8A00', '#FFD60A', '#16A34A', '#0EA5E9', '#17122B', '#FFFFFF'];
+  const COLORS = ['#4A9DF0', '#FF4D4F', '#FF8A00', '#FFD60A', '#16A34A', '#0EA5E9', '#061230', '#FFFFFF'];
   const SIZES = [2, 4, 8];
   const st = { tool: 'arrow', color: COLORS[1], size: 4, shapes: [], crop: null, sel: -1 };
   const undo = [], redo = [];
   const snap = () => JSON.stringify({ shapes: st.shapes, crop: st.crop });
   const commit = () => { undo.push(snap()); redo.length = 0; syncUndo(); };
+  // annotations not yet saved: warn before the tab closes (Delete closes on purpose, so it clears this)
+  let savedSnap = snap();
+  const dirty = () => snap() !== savedSnap;
+  window.addEventListener('beforeunload', (e) => { if (dirty()) e.preventDefault(); });
 
   $('#toolbar').innerHTML = `<div class="toolbar">
     ${TOOLS.map(([t, ic, tip]) => `<button class="tool ${st.tool === t ? 'on' : ''}" data-tool="${t}" title="${tip}">${icon(ic)}</button>`).join('')}
@@ -174,7 +184,7 @@ async function imageEditor() {
         c.font = `700 ${fs}px Jakarta, system-ui, sans-serif`;
         c.textBaseline = 'top';
         const lines = s.text.split('\n');
-        if (s.color === '#FFFFFF') { c.strokeStyle = '#17122B'; c.lineWidth = fs / 6; lines.forEach((ln, i) => c.strokeText(ln, x1, y1 + i * fs * 1.2)); }
+        if (s.color === '#FFFFFF') { c.strokeStyle = '#061230'; c.lineWidth = fs / 6; lines.forEach((ln, i) => c.strokeText(ln, x1, y1 + i * fs * 1.2)); }
         else { c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = fs / 7; lines.forEach((ln, i) => c.strokeText(ln, x1, y1 + i * fs * 1.2)); }
         lines.forEach((ln, i) => c.fillText(ln, x1, y1 + i * fs * 1.2));
         s.w = Math.max(...lines.map((ln) => c.measureText(ln).width));
@@ -199,13 +209,13 @@ async function imageEditor() {
     if (forExport) return;
     if (st.sel >= 0 && st.shapes[st.sel]) {
       const b = bounds(st.shapes[st.sel]), p = 6 * K;
-      ctx.save(); ctx.setLineDash([6 * K, 4 * K]); ctx.strokeStyle = '#7241ff'; ctx.lineWidth = 1.5 * K;
+      ctx.save(); ctx.setLineDash([6 * K, 4 * K]); ctx.strokeStyle = '#4a9df0'; ctx.lineWidth = 1.5 * K;
       ctx.strokeRect(b.x - p, b.y - p, b.w + p * 2, b.h + p * 2); ctx.restore();
     }
     if (st.crop) {
       const c = norm(st.crop);
       ctx.save();
-      ctx.fillStyle = 'rgba(23,18,43,.55)';
+      ctx.fillStyle = 'rgba(6,18,48,.55)';
       ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.rect(c.x, c.y, c.w, c.h); ctx.fill('evenodd');
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * K; ctx.setLineDash([8 * K, 6 * K]); ctx.strokeRect(c.x, c.y, c.w, c.h);
       ctx.restore();
@@ -217,6 +227,7 @@ async function imageEditor() {
   // ── pointer ──
   const toImg = (e) => { const r = cv.getBoundingClientRect(); return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H }; };
   let drag = null;
+  const clampX = (x) => Math.max(0, Math.min(W, x)), clampY = (y) => Math.max(0, Math.min(H, y));
   cv.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     const p = toImg(e);
@@ -233,7 +244,7 @@ async function imageEditor() {
       render();
       return;
     }
-    if (st.tool === 'crop') { commit(); st.crop = { x1: p.x, y1: p.y, x2: p.x, y2: p.y }; drag = { kind: 'crop' }; return; }
+    if (st.tool === 'crop') { commit(); st.crop = { x1: clampX(p.x), y1: clampY(p.y), x2: clampX(p.x), y2: clampY(p.y) }; drag = { kind: 'crop' }; return; }
     commit();
     const s = { type: st.tool, color: st.color, size: st.size, x1: p.x, y1: p.y, x2: p.x, y2: p.y };
     if (st.tool === 'pen' || st.tool === 'highlight') s.pts = [[p.x, p.y]];
@@ -248,7 +259,7 @@ async function imageEditor() {
       if (s.pts) s.pts = s.pts.map(([x, y]) => [x + dx, y + dy]);
       s.x1 += dx; s.y1 += dy; s.x2 += dx; s.y2 += dy;
       drag.last = p;
-    } else if (drag.kind === 'crop') { st.crop.x2 = p.x; st.crop.y2 = p.y; }
+    } else if (drag.kind === 'crop') { st.crop.x2 = clampX(p.x); st.crop.y2 = clampY(p.y); } // pointer capture reports points outside the image
     else {
       const s = drag.s;
       if (s.pts) s.pts.push([p.x, p.y]);
@@ -257,7 +268,7 @@ async function imageEditor() {
     }
     render();
   });
-  cv.addEventListener('pointerup', () => {
+  const endDrag = () => {
     if (!drag) return;
     if (drag.kind === 'draw') {
       const b = bounds(drag.s);
@@ -269,7 +280,9 @@ async function imageEditor() {
     }
     drag = null;
     render();
-  });
+  };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
   cv.addEventListener('dblclick', () => { if (st.tool === 'move') wrap.classList.toggle('zoom'); });
 
   function startText(p, e) {
@@ -291,9 +304,10 @@ async function imageEditor() {
     };
     el.addEventListener('blur', done, { once: true });
     el.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.isComposing || ev.keyCode === 229) return; // Enter confirms an IME composition (Japanese, Chinese, Korean), not the text
       if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); el.blur(); }
       if (ev.key === 'Escape') { el.innerText = ''; el.blur(); }
-      ev.stopPropagation();
     });
   }
 
@@ -317,7 +331,7 @@ async function imageEditor() {
     $$('[data-size]').forEach((x) => x.classList.toggle('on', x === b));
     if (st.sel >= 0) { commit(); st.shapes[st.sel].size = st.size; render(); }
   }));
-  const restore = (json) => { const o = JSON.parse(json); st.shapes = o.shapes; st.crop = o.crop; st.sel = -1; render(); syncUndo(); };
+  const restore = (json) => { const o = JSON.parse(json); st.shapes = o.shapes; st.crop = o.crop; st.sel = -1; drag = null; render(); syncUndo(); };
   $('#undo').onclick = () => { if (!undo.length) return; redo.push(snap()); restore(undo.pop()); };
   $('#redo').onclick = () => { if (!redo.length) return; undo.push(snap()); restore(redo.pop()); };
   $('#clear').onclick = () => { if (!st.shapes.length && !st.crop) return; commit(); st.shapes = []; st.crop = null; st.sel = -1; render(); };
@@ -328,7 +342,7 @@ async function imageEditor() {
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); $('#saveBtn').click(); return; }
     if (mod && e.key.toLowerCase() === 'c' && !getSelection().toString()) { e.preventDefault(); $('#copyBtn').click(); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && st.sel >= 0) { commit(); st.shapes.splice(st.sel, 1); st.sel = -1; render(); return; }
-    if (e.key === 'Escape') { st.sel = -1; if (st.tool === 'crop') st.crop = null; render(); return; }
+    if (e.key === 'Escape') { st.sel = -1; if (st.tool === 'crop' && st.crop) { commit(); st.crop = null; } render(); return; }
     const t = TOOLS.find((x) => x[3] === e.key.toLowerCase());
     if (t && !mod) setTool(t[0]);
   });
@@ -376,7 +390,12 @@ async function imageEditor() {
       const blob = await convert(png, fmt);
       const name = (item.name || 'capture').replace(/\.[a-z0-9]+$/i, '') + '.' + fmt;
       // the first save keeps the unannotated capture so "Download original" still has it after reopening
-      item = await updateItem(id, { blob, format: fmt, name, preview: fmt === 'png' ? undefined : png, thumb: await thumbnail(await createImageBitmap(png)), pending: false, original: item.original ?? src });
+      const patch = { blob, format: fmt, name, preview: fmt === 'png' ? undefined : png, thumb: await thumbnail(await createImageBitmap(png)), pending: false, original: item.original ?? src };
+      // the item may have been deleted (History, Clear history, pruning) while open here: put it back instead of losing the edit
+      const updated = await updateItem(id, patch);
+      item = updated ?? { ...item, ...patch, id };
+      if (!updated) await putItem(item);
+      savedSnap = snap();
       $('#title').textContent = name;
       $('#banner').innerHTML = '';
       if (S.copy) await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).catch(() => {});
@@ -400,7 +419,7 @@ async function imageEditor() {
       m.remove();
       if (a === 'dl') { const png = await exportPng(); const blob = await convert(png, fmt); await download(blob, (item.name || 'capture').replace(/\.[a-z0-9]+$/i, '') + '.' + fmt, true); }
       if (a === 'orig') await download(item.original ?? src, (item.name || 'capture').replace(/\.[a-z0-9]+$/i, '') + '-original.png');
-      if (a === 'del') { await deleteItem(id); window.close(); }
+      if (a === 'del') { await deleteItem(id); savedSnap = snap(); window.close(); }
     };
   });
   more.title = 'More';
