@@ -26,7 +26,7 @@ registerView('assets', async ({ focus, live }) => {
       </div>
     </div>`;
   hydrateIcons(view);
-  if (focus === 'a11y') $('.col-r').animate([{ background: '#f6f1ff' }, { background: 'transparent' }], { duration: 1200 });
+  if (focus === 'a11y') $('.col-r').animate([{ background: 'rgba(122,184,245,.14)' }, { background: 'transparent' }], { duration: 1200 });
   const showErr = (sel) => (e) => { if (live()) $(sel).innerHTML = `<div class="err-box">${esc(e.message)}</div>`; };
   const assetsP = (cache.assets ? Promise.resolve(cache.assets) : inject(scanAssets).then((r) => (cache.assets = r)))
     .then(() => live() && renderAssets()).catch(showErr('#aBody'));
@@ -103,7 +103,7 @@ function assetCard(a, i) {
   const checker = a.type !== 'font' && !(a.format === 'jpg' || a.format === 'jpeg');
   return `<div class="card acard ${aState.selected.has(a.url) ? 'sel' : ''}" data-i="${i}">
     <input type="checkbox" class="cb" ${aState.selected.has(a.url) ? 'checked' : ''} />
-    <div class="th ${checker ? 'checker' : ''}" title="${esc(a.url.startsWith('data:') ? a.name : a.url)}" style="${a.type === 'font' ? 'background:#f6f3fb' : ''}">${thumb}</div>
+    <div class="th ${checker ? 'checker' : ''}" title="${esc(a.url.startsWith('data:') ? a.name : a.url)}" style="${a.type === 'font' ? 'background:var(--surface-2)' : ''}">${thumb}</div>
     <div class="inf"><b title="${esc(a.family || a.name)}">${esc(a.name)}</b>
       <div class="row"><span class="badge">${esc(fmt)}</span><span data-size="${esc(a.url)}">${a.size ? bytes(a.size) : a.w ? `${a.w}×${a.h}` : '—'}</span></div></div>
     <button class="icon-btn" data-more>${icon('dots')}</button>

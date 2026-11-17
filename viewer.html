@@ -5,19 +5,19 @@
   <title>LupaX</title>
   <link rel="stylesheet" href="styles/ui.css" />
   <style>
-    body { background: #f6f4fb; }
+    body { background: var(--bg); }
     .page-top .meta { min-width: 0; }
     .page-top .meta b { display: block; font-size: 15px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
     .page-top .meta a { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 42vw; }
     .sep { width: 1px; height: 26px; background: var(--line-2); }
-    .toolbar { position: sticky; top: 64px; z-index: 9; margin: 14px auto 0; width: max-content; max-width: calc(100% - 32px); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; border-radius: 14px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-pop); }
+    .toolbar { position: sticky; top: 64px; z-index: 9; margin: 14px auto 0; width: max-content; max-width: calc(100% - 32px); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px; border-radius: 14px; background: var(--pop); border: 1px solid var(--line-2); box-shadow: var(--shadow-pop); }
     .tool { width: 36px; height: 36px; border: 0; border-radius: 10px; background: none; display: grid; place-items: center; color: var(--ink-2); position: relative; }
     .tool:hover { background: var(--brand-50); color: var(--brand); }
-    .tool.on { background: linear-gradient(180deg, #8155ff, #6a37f8); color: #fff; box-shadow: 0 3px 10px rgba(114, 65, 255, .35); }
+    .tool.on { background: var(--grad-btn); color: var(--on-brand); box-shadow: 0 3px 10px rgba(122, 184, 245, .35); }
     .tool .ico { width: 19px; height: 19px; }
     .tool:disabled { opacity: .35; }
     .colors { display: flex; gap: 5px; padding: 0 4px; }
-    .colors button { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line-2); }
+    .colors button { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--pop); box-shadow: 0 0 0 1px var(--line-2); }
     .colors button.on { box-shadow: 0 0 0 2px var(--brand); }
     .sizes { display: flex; gap: 2px; }
     .sizes button { width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; display: grid; place-items: center; }
@@ -25,12 +25,12 @@
     .sizes button.on { background: var(--brand-50); }
     .sizes button.on i { background: var(--brand); }
     .stage { padding: 22px 24px 60px; display: flex; justify-content: center; }
-    .canvas-wrap { position: relative; box-shadow: 0 10px 40px rgba(60, 30, 140, .16); border-radius: 6px; overflow: hidden; line-height: 0; }
+    .canvas-wrap { position: relative; box-shadow: 0 10px 40px rgba(0, 0, 0, .45); border-radius: 6px; overflow: hidden; line-height: 0; }
     canvas { max-width: min(100%, 1400px); display: block; touch-action: none; }
     .canvas-wrap.zoom canvas { max-width: none; }
     .txt-in { position: absolute; z-index: 3; border: 1.5px dashed var(--brand); background: rgba(255,255,255,.6); outline: none; padding: 2px 4px; font-weight: 700; font-family: var(--font); line-height: 1.2; min-width: 40px; }
-    .media { max-width: min(100%, 1200px); border-radius: 10px; box-shadow: 0 10px 40px rgba(60, 30, 140, .16); background: #000; }
-    pre.code { max-width: 1000px; width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px; font: 12.5px/1.55 var(--mono); overflow: auto; white-space: pre-wrap; word-break: break-word; box-shadow: var(--shadow-card); }
+    .media { max-width: min(100%, 1200px); border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, .45); background: #000; }
+    pre.code { max-width: 1000px; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; font: 12.5px/1.55 var(--mono); overflow: auto; white-space: pre-wrap; word-break: break-word; box-shadow: var(--shadow-card); }
     .banner { display: flex; align-items: center; gap: 10px; margin: 14px auto 0; width: max-content; max-width: calc(100% - 32px); padding: 8px 14px; border-radius: 999px; background: var(--brand-50); color: var(--brand); font-weight: 650; font-size: 12.5px; }
     .banner .ico { width: 16px; height: 16px; }
     .file-card { padding: 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 320px; }

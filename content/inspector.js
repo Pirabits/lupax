@@ -26,32 +26,32 @@
     .m,.p,.c{position:fixed;pointer-events:none;display:none}
     .m{background:rgba(255,166,77,.22)}
     .p{background:rgba(74,222,128,.22)}
-    .c{outline:1.5px dashed #7241ff;background:rgba(114,65,255,.06)}
-    .sel{position:fixed;pointer-events:none;display:none;outline:2px solid #7241ff;background:rgba(114,65,255,.05)}
-    .sel i{position:absolute;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #7241ff;margin:-5px 0 0 -5px}
-    .tag{position:fixed;pointer-events:none;display:none;font:600 12.5px/1 IXJakarta,system-ui,sans-serif;color:#fff;background:#7241ff;padding:6px 9px;border-radius:6px;white-space:nowrap;box-shadow:0 4px 12px rgba(114,65,255,.35);gap:6px;align-items:center}
+    .c{outline:1.5px dashed #4a9df0;background:rgba(74,157,240,.07)}
+    .sel{position:fixed;pointer-events:none;display:none;outline:2px solid #4a9df0;background:rgba(74,157,240,.06)}
+    .sel i{position:absolute;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #4a9df0;margin:-5px 0 0 -5px}
+    .tag{position:fixed;pointer-events:none;display:none;font:600 12.5px/1 IXJakarta,system-ui,sans-serif;color:#7ab8f5;background:#061230;padding:6px 9px;border-radius:6px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3);gap:6px;align-items:center}
     .tag::before{content:'✦';font-size:11px}
     .tag small{opacity:.75;font-weight:500;margin-left:4px}
-    .hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);pointer-events:none;font:600 12.5px/1 IXJakarta,system-ui,sans-serif;color:#fff;background:rgba(23,18,43,.92);padding:10px 16px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.25);white-space:nowrap}
-    .panel{position:fixed;top:16px;right:16px;width:316px;max-height:calc(100vh - 32px);overflow:auto;pointer-events:auto;background:#fff;color:#17122b;border:1px solid #ece8f4;border-radius:18px;box-shadow:0 18px 50px rgba(60,30,140,.22),0 2px 8px rgba(60,30,140,.08);font:500 12.5px/1.4 IXJakarta,system-ui,sans-serif;display:none}
-    .hd{display:flex;align-items:center;gap:8px;padding:12px 12px 10px 14px;cursor:move;border-bottom:1px solid #ece8f4;background:linear-gradient(180deg,#fbf9ff,#fff);position:sticky;top:0;z-index:1}
+    .hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);pointer-events:none;font:600 12.5px/1 IXJakarta,system-ui,sans-serif;color:#eef3fb;background:rgba(6,18,48,.92);padding:10px 16px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.25);white-space:nowrap}
+    .panel{position:fixed;top:16px;right:16px;width:316px;max-height:calc(100vh - 32px);overflow:auto;pointer-events:auto;background:#0a1836;color:#eef3fb;border:1px solid #223a68;border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.3);font:500 12.5px/1.4 IXJakarta,system-ui,sans-serif;display:none}
+    .hd{display:flex;align-items:center;gap:8px;padding:12px 12px 10px 14px;cursor:move;border-bottom:1px solid #172a52;background:linear-gradient(180deg,#0e1f44,#0a1836);position:sticky;top:0;z-index:1}
     .hd b{font-size:15px;font-weight:800;letter-spacing:-.02em}
     .hd .sp{flex:1}
-    .x{width:28px;height:28px;border:0;border-radius:8px;background:none;cursor:pointer;color:#3a3550;display:grid;place-items:center}
-    .x:hover{background:#f4efff;color:#7241ff}
-    .chip{display:inline-flex;align-items:center;gap:6px;font:700 12px/1 ui-monospace,Menlo,monospace;color:#7241ff;background:#f4efff;padding:6px 8px;border-radius:7px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .sec{padding:10px 14px;border-bottom:1px solid #ece8f4}
+    .x{width:28px;height:28px;border:0;border-radius:8px;background:none;cursor:pointer;color:#b7c6de;display:grid;place-items:center}
+    .x:hover{background:#163463;color:#7ab8f5}
+    .chip{display:inline-flex;align-items:center;gap:6px;font:700 12px/1 ui-monospace,Menlo,monospace;color:#7ab8f5;background:#10264f;padding:6px 8px;border-radius:7px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sec{padding:10px 14px;border-bottom:1px solid #172a52}
     .sec:last-child{border-bottom:0}
-    .sec h4{margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9a94ad}
+    .sec h4{margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8597b8}
     .kv{display:flex;align-items:center;gap:8px;min-height:27px}
-    .kv .k{width:92px;color:#6e6884;flex:none}
+    .kv .k{width:92px;color:#8597b8;flex:none}
     .kv .v{flex:1;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .sw{width:18px;height:18px;border-radius:5px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);flex:none}
-    .cp{border:0;background:none;cursor:pointer;color:#9a94ad;padding:2px;border-radius:5px;font:inherit;display:grid;place-items:center}
-    .cp:hover{color:#7241ff;background:#f4efff}
+    .sw{width:18px;height:18px;border-radius:5px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);flex:none}
+    .cp{border:0;background:none;cursor:pointer;color:#8597b8;padding:2px;border-radius:5px;font:inherit;display:grid;place-items:center}
+    .cp:hover{color:#7ab8f5;background:#163463}
     .aa{display:inline-grid;place-items:center;width:24px;height:20px;border-radius:5px;font-size:11px;font-weight:800;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
     .bdg{margin-left:auto;display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:700}
-    .good{background:#e9f9ef;color:#16a34a}.warn{background:#fff7e6;color:#b45309}.bad{background:#fdecec;color:#ef4444}
+    .good{background:#0d2c2c;color:#4ade80}.warn{background:#2c2616;color:#fbbf24}.bad{background:#321a2b;color:#f87171}
     .box{position:relative;text-align:center;font:600 10.5px/1 ui-monospace,Menlo,monospace;color:#3a3550}
     .box .lyr{position:relative;padding:16px 22px;border-radius:8px}
     .box .lbl{position:absolute;left:6px;top:4px;font:700 9px/1 IXJakarta,system-ui;text-transform:uppercase;letter-spacing:.05em;color:#6e6884}
@@ -59,13 +59,13 @@
     .box .t{top:4px;left:50%;transform:translateX(-50%)}.box .b{bottom:3px;left:50%;transform:translateX(-50%)}
     .box .l{left:6px;top:50%;transform:translateY(-50%)}.box .r{right:6px;top:50%;transform:translateY(-50%)}
     .mg{background:#fff1e3;border:1px dashed #ffb27a}.bd{background:#fff9db;border:1.5px solid #f5d76e}.pd{background:#e6f9ee;border:1px dashed #66d19a}
-    .ct{background:#f1ecff;border:1px solid #c7b4ff;border-radius:5px;padding:9px 6px;color:#7241ff}
+    .ct{background:#e3f0fd;border:1px solid #9cc8f5;border-radius:5px;padding:9px 6px;color:#1f5fa8}
     .acts{display:flex;gap:6px;padding:12px 14px 14px}
-    .btn{flex:1;height:34px;border-radius:10px;border:1px solid #e2dcef;background:#fff;font:650 12.5px IXJakarta,system-ui,sans-serif;color:#17122b;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
-    .btn:hover{border-color:#d9cbff;background:#faf8fe}
-    .btn.pri{border:0;color:#fff;background:linear-gradient(90deg,#6a37ff,#a43ff5 70%,#e45bd0);box-shadow:0 4px 12px rgba(114,65,255,.3)}
+    .btn{flex:1;height:34px;border-radius:10px;border:1px solid #223a68;background:#0f2148;font:650 12.5px IXJakarta,system-ui,sans-serif;color:#eef3fb;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+    .btn:hover{border-color:#2c5a96;background:#14284f}
+    .btn.pri{border:0;color:#061230;background:linear-gradient(180deg,#8fc4f7,#5ea6f0);box-shadow:0 4px 12px rgba(122,184,245,.25)}
     svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-    .toast{position:fixed;left:50%;bottom:62px;transform:translateX(-50%);background:#17122b;color:#fff;font:600 12.5px IXJakarta,system-ui;padding:9px 14px;border-radius:10px;opacity:0;transition:opacity .15s;pointer-events:none}
+    .toast{position:fixed;left:50%;bottom:62px;transform:translateX(-50%);background:#163463;color:#eef3fb;font:600 12.5px IXJakarta,system-ui;padding:9px 14px;border-radius:10px;opacity:0;transition:opacity .15s;pointer-events:none}
     .toast.on{opacity:1}
   </style>
   <div class="m"></div><div class="p"></div><div class="c"></div>
@@ -84,7 +84,7 @@
     ok: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.2 12.3 2.6 2.6 5-5.4"/></svg>',
     warn: '<svg viewBox="0 0 24 24"><path d="M10.3 4.3 2.6 17.6A2 2 0 0 0 4.3 20.6h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4.5M12 17.2h.01"/></svg>',
   };
-  const LOGO = '<svg viewBox="0 0 48 48" style="width:24px;height:24px;stroke:none"><defs><linearGradient id="ixl" x1="6" y1="6" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6a37ff"/><stop offset=".55" stop-color="#9b3dff"/><stop offset="1" stop-color="#e04fd6"/></linearGradient></defs><circle cx="21" cy="21" r="14.5" fill="none" stroke="url(#ixl)" stroke-width="6.5"/><path d="M31.5 33.5 40.5 42.5M40.5 33.5 31.5 42.5" stroke="#ff6a55" stroke-width="5" stroke-linecap="round"/></svg>';
+  const LOGO = '<svg viewBox="0 0 48 48" style="width:24px;height:24px"><circle cx="20" cy="20" r="13.5" fill="none" stroke="#7ab8f5" stroke-width="3.6"/><path d="M14.8 14.8 25.2 25.2M25.2 14.8 14.8 25.2" stroke="#7ab8f5" stroke-width="3.2" fill="none"/><path d="M30.2 30.2 41.5 41.5" stroke="#7ab8f5" stroke-width="5.6" stroke-linecap="round" fill="none"/></svg>';
 
   let active = false, hover = null, pinned = null, stack = [], raf = 0;
 
@@ -176,7 +176,7 @@
     const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || el.innerText?.trim();
 
     PANEL.innerHTML = `
-      <div class="hd">${LOGO}<b>LupaX</b><span class="sp"></span><button class="x" data-act="close" title="Exit (Esc)">${ICON.x}</button></div>
+      <div class="hd">${LOGO}<b>Lupa<span style="color:#7ab8f5">X</span></b><span class="sp"></span><button class="x" data-act="close" title="Exit (Esc)">${ICON.x}</button></div>
       <div class="sec"><span class="chip" title="${esc(name(el))}">◆ ${esc(name(el))}</span>
         <div class="kv" style="margin-top:6px"><span class="k">Size</span><span class="v">${px(r.width)} × ${px(r.height)} px</span></div>
         <div class="kv"><span class="k">Display</span><span class="v">${cs.display} · ${cs.position}</span></div></div>

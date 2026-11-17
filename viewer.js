@@ -96,7 +96,7 @@ async function imageEditor() {
     ['arrow', 'arrowTool', 'Arrow (A)', 'a'], ['line', 'line', 'Line (L)', 'l'], ['rect', 'rect', 'Rectangle (R)', 'r'],
     ['ellipse', 'ellipse', 'Ellipse (O)', 'o'], ['text', 'text', 'Text (T)', 't'], ['blur', 'blur', 'Blur / pixelate (B)', 'b'], ['crop', 'crop', 'Crop (C)', 'c'],
   ];
-  const COLORS = ['#7241FF', '#FF4D4F', '#FF8A00', '#FFD60A', '#16A34A', '#0EA5E9', '#17122B', '#FFFFFF'];
+  const COLORS = ['#4A9DF0', '#FF4D4F', '#FF8A00', '#FFD60A', '#16A34A', '#0EA5E9', '#061230', '#FFFFFF'];
   const SIZES = [2, 4, 8];
   const st = { tool: 'arrow', color: COLORS[1], size: 4, shapes: [], crop: null, sel: -1 };
   const undo = [], redo = [];
@@ -174,7 +174,7 @@ async function imageEditor() {
         c.font = `700 ${fs}px Jakarta, system-ui, sans-serif`;
         c.textBaseline = 'top';
         const lines = s.text.split('\n');
-        if (s.color === '#FFFFFF') { c.strokeStyle = '#17122B'; c.lineWidth = fs / 6; lines.forEach((ln, i) => c.strokeText(ln, x1, y1 + i * fs * 1.2)); }
+        if (s.color === '#FFFFFF') { c.strokeStyle = '#061230'; c.lineWidth = fs / 6; lines.forEach((ln, i) => c.strokeText(ln, x1, y1 + i * fs * 1.2)); }
         else { c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = fs / 7; lines.forEach((ln, i) => c.strokeText(ln, x1, y1 + i * fs * 1.2)); }
         lines.forEach((ln, i) => c.fillText(ln, x1, y1 + i * fs * 1.2));
         s.w = Math.max(...lines.map((ln) => c.measureText(ln).width));
@@ -199,13 +199,13 @@ async function imageEditor() {
     if (forExport) return;
     if (st.sel >= 0 && st.shapes[st.sel]) {
       const b = bounds(st.shapes[st.sel]), p = 6 * K;
-      ctx.save(); ctx.setLineDash([6 * K, 4 * K]); ctx.strokeStyle = '#7241ff'; ctx.lineWidth = 1.5 * K;
+      ctx.save(); ctx.setLineDash([6 * K, 4 * K]); ctx.strokeStyle = '#4a9df0'; ctx.lineWidth = 1.5 * K;
       ctx.strokeRect(b.x - p, b.y - p, b.w + p * 2, b.h + p * 2); ctx.restore();
     }
     if (st.crop) {
       const c = norm(st.crop);
       ctx.save();
-      ctx.fillStyle = 'rgba(23,18,43,.55)';
+      ctx.fillStyle = 'rgba(6,18,48,.55)';
       ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.rect(c.x, c.y, c.w, c.h); ctx.fill('evenodd');
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * K; ctx.setLineDash([8 * K, 6 * K]); ctx.strokeRect(c.x, c.y, c.w, c.h);
       ctx.restore();
