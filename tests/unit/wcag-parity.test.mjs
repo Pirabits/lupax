@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { luminance, contrast } from '../../lib/color.js';
+import { luminance, contrast, parseColor } from '../../lib/color.js';
 
 const read = (p) => fs.readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 
@@ -53,4 +53,17 @@ for (const c of COPIES) {
 test('the inspector inlines the same contrast formula', () => {
   // content/inspector.js computes the ratio inline rather than via a helper
   assert.match(read('content/inspector.js'), /\(Math\.max\(lum\(blend\(fg, bg\)\), lum\(bg\)\) \+ 0\.05\) \/ \(Math\.min\(lum\(blend\(fg, bg\)\), lum\(bg\)\) \+ 0\.05\)/);
+});
+
+test('every injected parse() copy is identical and reads rgb()/rgba() like lib/color.js', () => {
+  // the oklch()/lab()/color() fallback needs a canvas, so it is covered end-to-end (tests/e2e "oklch"); here we pin the copies together
+  const copies = [...extract('lib/scan.js', 'parse'), ...extract('content/inspector.js', 'parse')];
+  assert.equal(copies.length, 3, 'expected parse() in scanStyles, scanA11y and the inspector — if one moved, update this test');
+  assert.equal(new Set(copies).size, 1, 'parse() copies have drifted apart');
+  const parse = new Function(`const parse = ${copies[0]}; return parse;`)();
+  for (const s of ['rgb(114, 65, 255)', 'rgba(0, 0, 0, 0.5)', 'rgba(255, 255, 255, 0)', 'rgb(1 2 3 / 0.25)']) {
+    const want = parseColor(s);
+    assert.deepEqual(parse(s), want, s);
+  }
+  assert.equal(parse(''), null);
 });

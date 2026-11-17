@@ -149,6 +149,35 @@ test('accessibility score weighs every check by how many elements it analyzed', 
   assert.equal(r.truncated, false);
 });
 
+test('scans handle oklch()/lab() colors and elements with numeric values', async () => {
+  const url = SITE.replace('site.html', 'modern.html');
+  await freshSite(url);
+  const scan = (fn) => run(`const m = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: m.${fn} }))[0].result;`);
+  const hexes = (list) => list.map((c) => c.value);
+  const near = (hex, [r, g, b], tol = 12) => { const n = parseInt(hex.slice(1, 7), 16); return Math.abs((n >> 16) - r) <= tol && Math.abs(((n >> 8) & 255) - g) <= tol && Math.abs((n & 255) - b) <= tol; };
+
+  // <progress>/<meter>/<li value> used to throw "trim is not a function" and kill the whole style scan
+  const s = await scan('scanStyles');
+  assert.ok(s?.colors, 'style scan returned a result');
+  const colors = hexes(s.colors);
+  assert.ok(colors.some((h) => near(h, [21, 93, 252])), `oklch blue-600 is in the palette: ${colors}`);
+  assert.ok(colors.some((h) => near(h, [229, 229, 229])), `oklch gray text is in the palette: ${colors}`);
+  assert.ok(colors.some((h) => near(h, [0, 166, 62], 20)), `oklch shadow color is in the palette: ${colors}`);
+  assert.ok(colors.length >= 6, `gradient (lab/oklch) stops are collected too: ${colors}`);
+  // both .cta elements share one style, so they are one component; its label still comes from the button text
+  assert.match(s.components.buttons[0]?.label || '', /^(Get started|Sign up)$/);
+  assert.ok(near(s.components.buttons[0].bg, [21, 93, 252]), `button background resolved: ${s.components.buttons[0].bg}`);
+
+  // white text on an oklch blue passes; light-gray oklch text on white fails
+  const a = await scan('scanA11y');
+  const contrast = a.checks.find((c) => c.id === 'contrast');
+  const failed = contrast.items.map((i) => i.text);
+  assert.ok(!failed.some((t) => /Get started|Sign up/.test(t)), `oklch button not misreported: ${JSON.stringify(contrast.items)}`);
+  assert.ok(failed.includes('Barely visible oklch text'), `oklch low-contrast text is reported: ${JSON.stringify(contrast.items)}`);
+});
+
 test('visible capture is stored as PNG', async () => {
   await setSettings({ capture: quietCapture });
   await freshSite();

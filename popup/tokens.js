@@ -79,7 +79,9 @@ export function tokensTailwind(d) {
       boxShadow: Object.fromEntries(t.shadows.map((s) => [s.name, s.value])),
     } },
   };
-  return `/** Tailwind theme extracted by LupaX from ${d.url} */\nmodule.exports = ${JSON.stringify(obj, null, 2)};\n`;
+  // the page controls its URL: never put it in the file raw (a "*/" or line break would let it escape the comment and run as code)
+  const source = JSON.stringify(String(d.url)).replace(/[\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16)}`);
+  return `/** Tailwind theme extracted by LupaX */\n// Source: ${source}\nmodule.exports = ${JSON.stringify(obj, null, 2)};\n`;
 }
 
 /** CSS declarations for one typography variant. */
