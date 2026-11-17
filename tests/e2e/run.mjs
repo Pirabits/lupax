@@ -254,6 +254,44 @@ test('"Show on page" selectors point at the reported element, not an earlier loo
   assert.deepEqual(hit, { n: 1, alt: null }, `selector ${item.selector} matches only the image without alt`);
 });
 
+test('web components: scans, "Show on page" and the inspector reach into open shadow roots', async () => {
+  const url = SITE.replace('site.html', 'shadow.html');
+  await freshSite(url);
+  const scan = (fn) => run(`const m = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: m.${fn} }))[0].result;`);
+
+  const a = await scan('scanA11y');
+  const items = (id) => a.checks.find((c) => c.id === id).items;
+  assert.ok(items('contrast').some((i) => i.text === 'Faint text inside a shadow root'), 'contrast checked inside the shadow root');
+  const alts = items('alt').map((i) => i.selector);
+  assert.equal(alts.length, 2, `both images without alt, including the nested component: ${alts}`);
+  assert.ok(alts.every((s) => s.includes(' >>> ')), `selectors go through the host: ${alts}`);
+  assert.ok(items('names').some((i) => i.selector.endsWith('button.icon-only') || i.selector.includes('>>> button')), 'unnamed button inside the shadow root');
+  // "Show" follows the >>> path down to the nested image
+  const shown = await run(`const m = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: m.highlightOnPage, args: [${JSON.stringify(alts.find((s) => s.split(' >>> ').length === 3))}, 'x'] }))[0].result;`);
+  assert.equal(shown, true, 'nested shadow image highlighted');
+
+  const st = await scan('scanStyles');
+  assert.ok(st.colors.some((c) => c.value === '#C9C9C9'), 'shadow text color in the palette');
+  const as = await scan('scanAssets');
+  assert.ok(as.assets.some((x) => x.url.endsWith('/logo.svg?nested')), 'asset from the nested shadow root');
+
+  // inspector: hover hits the element inside the component, and ↑ climbs out to the host
+  await send({ type: 'inspect', on: true });
+  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  const pt = await site.evaluate(`(() => { const r = document.querySelector('x-card').shadowRoot.querySelector('.inside-shadow').getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; })()`);
+  await site.click(pt.x, pt.y);
+  const panel = async () => JSON.stringify(await site.send('DOM.getDocument', { depth: -1, pierce: true }));
+  await waitFor(async () => (await panel()).includes('p.inside-shadow'), { label: 'panel shows the shadow paragraph' });
+  await site.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38 });
+  await site.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38 });
+  await waitFor(async () => (await panel()).includes('◆ x-card'), { label: 'ArrowUp reaches the host' });
+  await send({ type: 'inspect', on: false });
+});
+
 test('report page survives a bad focus parameter and a scan that returns nothing', async () => {
   await freshSite();
   const tabId = await run(`return (await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }))[0].id`);

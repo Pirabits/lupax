@@ -7,8 +7,9 @@
   const hex = (c) => (c ? `#${hx(c.r)}${hx(c.g)}${hx(c.b)}${c.a < 1 ? hx(c.a * 255) : ''}`.toUpperCase() : '—');
   const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
   const blend = (t, b) => { const a = t.a + b.a * (1 - t.a); return a ? { r: (t.r * t.a + b.r * b.a * (1 - t.a)) / a, g: (t.g * t.a + b.g * b.a * (1 - t.a)) / a, b: (t.b * t.a + b.b * b.a * (1 - t.a)) / a, a } : t; };
-  const bgOf = (el) => { const L = []; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0) { L.push(c); if (c.a >= 1) break; } } let o = { r: 255, g: 255, b: 255, a: 1 }; for (let i = L.length - 1; i >= 0; i--) o = blend(L[i], o); return o; };
-  const overMedia = (el) => { const r = el.getBoundingClientRect(), area = r.width * r.height; const covers = (m) => { if (m === el || m.contains(el) || el.contains(m)) return false; const q = m.getBoundingClientRect(); const w = Math.min(r.right, q.right) - Math.max(r.left, q.left), h = Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top); return w > 0 && h > 0 && w * h >= 0.5 * area; }; for (let a = el; a && a.nodeType === 1; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.backgroundImage !== 'none') return true; for (const m of a.querySelectorAll('img, video, canvas')) if (covers(m)) return true; if ((parse(cs.backgroundColor)?.a || 0) >= 1) return false; } return false; };
+  const bgOf = (el) => { const L = []; for (let n = el; n && n.nodeType === 1; n = up(n)) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0) { L.push(c); if (c.a >= 1) break; } } let o = { r: 255, g: 255, b: 255, a: 1 }; for (let i = L.length - 1; i >= 0; i--) o = blend(L[i], o); return o; };
+  const up = (n) => n.parentElement || n.parentNode?.host || null;
+  const overMedia = (el) => { const r = el.getBoundingClientRect(), area = r.width * r.height; const covers = (m) => { if (m === el || m.contains(el) || el.contains(m)) return false; const q = m.getBoundingClientRect(); const w = Math.min(r.right, q.right) - Math.max(r.left, q.left), h = Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top); return w > 0 && h > 0 && w * h >= 0.5 * area; }; for (let a = el; a && a.nodeType === 1; a = up(a)) { const cs = getComputedStyle(a); if (cs.backgroundImage !== 'none') return true; for (const m of a.querySelectorAll('img, video, canvas')) if (covers(m)) return true; if ((parse(cs.backgroundColor)?.a || 0) >= 1) return false; } return false; };
   const name = (el) => el.tagName.toLowerCase() + (el.id ? '#' + el.id : typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/)[0] : '');
   const px = (v) => Math.round(parseFloat(v) * 10) / 10;
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -117,10 +118,16 @@
   function loop() { if (!active) return; drawHover(hover && hover !== pinned ? hover : null); drawPinned(); raf = requestAnimationFrame(loop); }
 
   const inPanel = (e) => e.composedPath().includes(host);
+  // elementFromPoint stops at a shadow host; descend into open shadow roots (ours is closed, so it's never entered)
+  const deepFromPoint = (x, y) => {
+    let el = document.elementFromPoint(x, y);
+    for (let inner; el?.shadowRoot && (inner = el.shadowRoot.elementFromPoint(x, y)) && inner !== el;) el = inner;
+    return el;
+  };
 
   function onMove(e) {
     if (inPanel(e)) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const el = deepFromPoint(e.clientX, e.clientY);
     if (el && el !== hover && el !== document.documentElement && el !== host) { hover = el; if (!pinned) stack = []; }
   }
   function onClick(e) {
@@ -135,7 +142,8 @@
     if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (pinned) unpin(); else stop(); return; }
     const cur = pinned || hover;
     if (!cur || inPanel(e)) return;
-    if (e.key === 'ArrowUp' && cur.parentElement && cur.parentElement !== document.documentElement) { e.preventDefault(); stack.push(cur); pinned ? pin(cur.parentElement, true) : (hover = cur.parentElement); }
+    const parent = up(cur);
+    if (e.key === 'ArrowUp' && parent && parent !== document.documentElement) { e.preventDefault(); stack.push(cur); pinned ? pin(parent, true) : (hover = parent); }
     if (e.key === 'ArrowDown' && stack.length) { e.preventDefault(); const n = stack.pop(); pinned ? pin(n, true) : (hover = n); }
   }
 
@@ -207,7 +215,7 @@
     PANEL.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => copy(b.dataset.copy)));
     PANEL.querySelector('[data-act="close"]').onclick = stop;
     PANEL.querySelector('[data-act="css"]').onclick = () => copy(cssOf(el), 'CSS');
-    PANEL.querySelector('[data-act="parent"]').onclick = () => { if (el.parentElement && el.parentElement !== document.documentElement) { stack.push(el); pin(el.parentElement, true); } };
+    PANEL.querySelector('[data-act="parent"]').onclick = () => { const p = up(el); if (p && p !== document.documentElement) { stack.push(el); pin(p, true); } };
 
     // drag panel by its header
     const hd = PANEL.querySelector('.hd');
@@ -215,9 +223,9 @@
       if (e.target.closest('button')) return;
       const r0 = PANEL.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
       const mv = (ev) => { PANEL.style.left = Math.max(0, r0.left + ev.clientX - sx) + 'px'; PANEL.style.top = Math.max(0, r0.top + ev.clientY - sy) + 'px'; PANEL.style.right = 'auto'; };
-      const up = () => { removeEventListener('pointermove', mv, true); removeEventListener('pointerup', up, true); };
+      const endDrag = () => { removeEventListener('pointermove', mv, true); removeEventListener('pointerup', endDrag, true); };
       addEventListener('pointermove', mv, true);
-      addEventListener('pointerup', up, true);
+      addEventListener('pointerup', endDrag, true);
     };
   }
 

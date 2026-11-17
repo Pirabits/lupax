@@ -73,3 +73,11 @@ test('the scan and the inspector share one overMedia() rule', () => {
   assert.equal(copies.length, 2, 'expected overMedia() in scanA11y and the inspector — if one moved, update this test');
   assert.equal(new Set(copies).size, 1, 'overMedia() copies have drifted apart');
 });
+
+test('shadow DOM helpers are identical in every injected copy', () => {
+  for (const [name, n] of [['up', 4], ['shadowRoots', 3], ['deepAll', 3]]) {
+    const copies = [...extract('lib/scan.js', name), ...extract('content/inspector.js', name)];
+    assert.equal(copies.length, n, `${name}() copies — if one moved, update this test`);
+    assert.equal(new Set(copies).size, 1, `${name}() copies have drifted apart`);
+  }
+});
