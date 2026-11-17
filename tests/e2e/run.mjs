@@ -243,6 +243,17 @@ test('accessibility scan: text over images, hidden content and svg titles are no
   assert.ok(!panelText.includes('"Poor"'), 'not rated Poor');
 });
 
+test('"Show on page" selectors point at the reported element, not an earlier look-alike', async () => {
+  const url = SITE.replace('site.html', 'deep.html');
+  await freshSite(url);
+  const r = await run(`const { scanA11y } = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: scanA11y }))[0].result;`);
+  const [item] = r.checks.find((c) => c.id === 'alt').items;
+  const hit = await site.evaluate(`(() => { const all = document.querySelectorAll(${JSON.stringify(item.selector)}); return { n: all.length, alt: all[0]?.getAttribute('alt') }; })()`);
+  assert.deepEqual(hit, { n: 1, alt: null }, `selector ${item.selector} matches only the image without alt`);
+});
+
 test('report page survives a bad focus parameter and a scan that returns nothing', async () => {
   await freshSite();
   const tabId = await run(`return (await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }))[0].id`);
@@ -354,6 +365,37 @@ test('a second capture while one is running is refused and leaves the page intac
   assert.equal(await count(), before + 1, 'exactly one capture was saved');
   const page = await site.evaluate(`({ vis: document.getElementById('stick').style.visibility, sb: document.documentElement.style.scrollBehavior, fixed: (window.__ixFixed || []).length })`);
   assert.deepEqual(page, { vis: '', sb: '', fixed: 0 }, 'sticky header and scroll-behavior restored');
+});
+
+test('switching tabs during a full-page capture stops it instead of stitching the other tab in', async () => {
+  await setSettings({ capture: { ...quietCapture, hideFixed: true } });
+  await freshSite();
+  await resetBadge();
+  const prev = (await lastItem())?.id;
+  await send({ type: 'capture', mode: 'full' });
+  await waitFor(async () => /%$/.test((await badge()).text), { label: 'capture in progress', ms: 5000 });
+  await run(`await chrome.tabs.create({ url: 'about:blank', active: true })`); // the user switches away mid-capture
+  const err = await waitFor(async () => { const t = (await badge()).title; return /switched tabs/.test(t) ? t : null; }, { label: 'stopped message', ms: 8000 });
+  assert.match(err, /Keep the page in front/);
+  await sleep(1500);
+  assert.equal((await lastItem())?.id, prev, 'no mixed-up image saved');
+  assert.equal(await site.evaluate(`document.documentElement.style.scrollBehavior`), '', 'page restored');
+  // the capture didn't hang, so the next one isn't refused as "already in progress"
+  await site.send('Page.bringToFront');
+  await run(`const [t] = await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }); await chrome.tabs.update(t.id, { active: true });`);
+  await send({ type: 'capture', mode: 'visible' });
+  await newItem(prev);
+});
+
+test('captures on pages Chrome protects explain why instead of showing Chrome’s raw error', async () => {
+  await setSettings({ capture: quietCapture });
+  await freshSite('chrome://version/');
+  for (const mode of ['visible', 'area', 'full']) {
+    await resetBadge();
+    await send({ type: 'capture', mode });
+    const title = await waitFor(async () => { const t = (await badge()).title; return t !== 'LupaX' ? t : null; }, { label: `${mode} error`, ms: 5000 });
+    assert.equal(title, 'LupaX — Chrome doesn’t let extensions capture or read this page (browser pages, the Web Store, the PDF viewer).', mode);
+  }
 });
 
 test('JPG and PDF output formats', async () => {

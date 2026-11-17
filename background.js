@@ -8,7 +8,9 @@ import { thumbnail } from './lib/thumb.js';
 // Chrome limits captureVisibleTab to ~2 calls/second.
 const CAPTURE_GAP_MS = 550;
 const MAX_DIM = 32000;
-const MAX_AREA = 250_000_000;
+// Pixels in one stitched capture. The canvas, the PNG decode for the thumbnail and a JPG/PDF conversion each hold a
+// full RGBA copy (4 bytes/px), so 100 MP is ~400 MB per copy; 250 MP risked the worker being killed with no error.
+const MAX_AREA = 100_000_000;
 // Clipboard images travel to the page as base64 script arguments; past this size we skip the copy and say so.
 const CLIPBOARD_MAX_BYTES = 20 * 1024 * 1024;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -127,14 +129,14 @@ async function runCaptureMode(tab, mode, delay) {
   delay ??= s.delay;
   switch (mode) {
     case 'visible':
-      return finishCapture(await dataUrlToBlob(await captureTab(tab.windowId)), tab);
+      return finishCapture(await dataUrlToBlob(await captureTabOf(tab)), tab);
     case 'delayed':
       await countdown(tab, delay);
-      return finishCapture(await dataUrlToBlob(await captureTab(tab.windowId)), tab);
+      return finishCapture(await dataUrlToBlob(await captureTabOf(tab)), tab);
     case 'area': {
       const r = await inject(tab.id, selectRegion, ['area']);
       if (!r) return;
-      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTab(tab.windowId)));
+      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTabOf(tab)));
       const k = bmp.width / r.innerWidth;
       const c = new OffscreenCanvas(Math.max(1, Math.round(r.w * k)), Math.max(1, Math.round(r.h * k)));
       c.getContext('2d').drawImage(bmp, r.x * k, r.y * k, r.w * k, r.h * k, 0, 0, c.width, c.height);
@@ -154,6 +156,21 @@ async function runCaptureMode(tab, mode, delay) {
     case 'full':
       return captureRegion(tab, null, { hideFixed: s.hideFixed });
   }
+}
+
+/** captureVisibleTab captures whatever tab is in front of the window: refuse once the user has switched away. */
+async function assertInFront(tab) {
+  const now = await chrome.tabs.get(tab.id).catch(() => null);
+  if (!now?.active) throw new Error('Capture stopped because you switched tabs. Keep the page in front until the capture finishes.');
+}
+async function captureTabOf(tab) {
+  await assertInFront(tab);
+  let shot, error;
+  try { shot = await captureTab(tab.windowId); } catch (e) { error = e; }
+  // checked again afterwards: a switch during the capture means the shot shows (or failed on) the other tab
+  await assertInFront(tab);
+  if (error) throw error;
+  return shot;
 }
 
 let lastCaptureAt = 0;
@@ -180,14 +197,16 @@ async function captureRegion(tab, rect, { hideFixed }) {
     const xs = steps(rect.x, rect.w, m.vw), ys = steps(rect.y, rect.h, m.vh);
     const multi = xs.length * ys.length > 1;
     if (multi) await setProgressBadge(0, xs.length * ys.length);
-    let canvas, ctx, scale, out, hidden = false, n = 0;
+    let canvas, ctx, scale, out, notice, hidden = false, n = 0;
     for (const y of ys) for (const x of xs) {
+      await assertInFront(tab); // before scrolling: a background tab would be scrolled and then captured as the wrong tab
       const pos = await inject(tabId, scrollToPos, [x, y]);
-      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTab(tab.windowId)));
+      const bmp = await createImageBitmap(await dataUrlToBlob(await captureTabOf(tab)));
       if (!canvas) {
         scale = bmp.width / m.innerW;
         const W = rect.w * scale, H = rect.h * scale;
         out = Math.min(1, MAX_DIM / W, MAX_DIM / H, Math.sqrt(MAX_AREA / (W * H)));
+        if (out < 1) notice = `This page is very long, so it was captured at ${Math.round(out * 100)}% scale.`;
         canvas = new OffscreenCanvas(Math.max(1, Math.round(W * out)), Math.max(1, Math.round(H * out)));
         ctx = canvas.getContext('2d');
       }
@@ -203,7 +222,7 @@ async function captureRegion(tab, rect, { hideFixed }) {
       if (multi && hideFixed && !hidden) { await inject(tabId, toggleFixed, [true]); hidden = true; }
     }
     await chrome.action.setBadgeText({ text: '' });
-    await finishCapture(await canvas.convertToBlob({ type: 'image/png' }), tab);
+    await finishCapture(await canvas.convertToBlob({ type: 'image/png' }), tab, { notice });
   } finally {
     await inject(tabId, pageRestore, [m.sx, m.sy]).catch(() => {});
   }
@@ -229,7 +248,7 @@ async function finishCapture(png, tab, meta = {}) {
   if (s.annotate) {
     // editor exports to the chosen type/destination when the user saves
     const id = await putItem({ ...common, format: 'png', name: `${base}.png`, blob: png, pending: true });
-    return openViewer(id, tab);
+    return openViewer(id, tab, meta.notice);
   }
 
   let blob = png, ext = 'png';
@@ -238,10 +257,10 @@ async function finishCapture(png, tab, meta = {}) {
   const name = `${base}.${ext}`;
   const id = await putItem({ ...common, format: ext, name, blob, preview: ext === 'png' ? undefined : png });
 
-  if (s.destination === 'none') return openViewer(id, tab);
+  if (s.destination === 'none') return openViewer(id, tab, meta.notice);
   await downloadItem(id, `LupaX/${name}`, s.destination === 'ask');
   const note = copied === true ? ' · copied to clipboard' : copied === 'too-large' ? ' · too large to copy to clipboard' : copied === false ? ' · clipboard copy failed' : '';
-  if (tab) inject(tab.id, pageToast, [`Saved ${name}${note}`]).catch(() => {});
+  if (tab) inject(tab.id, pageToast, [`Saved ${name}${note}${meta.notice ? ` · ${meta.notice}` : ''}`]).catch(() => {});
 }
 
 /** Download a stored item. The service worker can't make blob: URLs, so the offscreen document does. */
@@ -446,7 +465,7 @@ async function openRecorderPopup(mode, source) {
 // ───────────────────────────── color picker & inspector ─────────────────────────────
 
 async function pickColor(tab) {
-  const dataUrl = await captureTab(tab.windowId);
+  const dataUrl = await captureTabOf(tab);
   const hex = await inject(tab.id, pickerOverlay, [dataUrl]);
   if (!hex) return;
   const { colorHistory = [] } = await chrome.storage.local.get('colorHistory');
@@ -497,9 +516,22 @@ async function exportAssetsZip({ assets, title, url }, tab) {
 
 // ───────────────────────────── errors ─────────────────────────────
 
+/** Chrome's messages for pages extensions can't touch are cryptic ("Cannot access contents of url …"): say what it means. */
+function friendlyError(message) {
+  if (/file:\/\//i.test(message) && /cannot access|permission/i.test(message)) {
+    return 'LupaX can’t read local files yet. Turn on “Allow access to file URLs” for LupaX in chrome://extensions.';
+  }
+  if (/cannot access (a |contents of )|cannot be scripted|extensions gallery|missing host permission|'activeTab' permission|cannot capture/i.test(message)) {
+    return 'Chrome doesn’t let extensions capture or read this page (browser pages, the Web Store, the PDF viewer).';
+  }
+  return message;
+}
+
+let errorSeq = 0; // only the latest error's timer may clear the badge, or an older one wipes a newer message early
 async function reportError(err) {
   console.error('[LupaX]', err);
-  const message = err?.message || String(err);
+  const seq = ++errorSeq;
+  const message = friendlyError(err?.message || String(err));
   await chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
   await chrome.action.setBadgeText({ text: '!' });
   await chrome.action.setTitle({ title: `LupaX — ${message}` });
@@ -507,6 +539,7 @@ async function reportError(err) {
   const tab = await activeTab().catch(() => null);
   if (tab) inject(tab.id, pageToast, [message, 'error']).catch(() => {});
   setTimeout(async () => {
+    if (seq !== errorSeq) return;
     if (!(await getRecording())) await chrome.action.setBadgeText({ text: '' });
     await chrome.action.setTitle({ title: 'LupaX' });
   }, 5000);
@@ -530,7 +563,13 @@ function pagePrep() {
 
 function scrollToPos(x, y) {
   window.scrollTo(x, y);
-  return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => r({ x: scrollX, y: scrollY }), 150))));
+  // wait two frames for the page to paint; background tabs get no animation frames, so a timer settles it regardless
+  return new Promise((r) => {
+    let done = false;
+    const settle = () => { if (!done) { done = true; r({ x: scrollX, y: scrollY }); } };
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(settle, 150)));
+    setTimeout(settle, 1000);
+  });
 }
 
 function toggleFixed(hide) {
