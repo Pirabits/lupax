@@ -29,7 +29,8 @@ Requires Chrome 116+.
 
 - Chrome popups max out at 800×600 px, so long views (Capture, Style Inspector) scroll with a pinned action button.
 - Tab recording with mic/webcam needs a one-time grant (`permissions.html`) because offscreen documents can’t show permission prompts. The popup opens it before recording; the record shortcut opens it when a grant is missing.
-- `chrome://` pages and the Web Store can’t be captured, scanned or recorded.
+- Site access: LupaX has no standing access to websites (no “read and change all your data” warning at install). Chrome gives it access to a tab when you click the LupaX icon or use one of its shortcuts there, and keeps it through reloads and pages on the same site until the tab goes to another site. ZIP export asks for access to the sites the assets come from (`optional_host_permissions`); if declined, assets from sites that allow cross-site downloads (CORS) are still exported. Asset sizes and font previews in the popup appear for those sites, or once access was granted.
+- `chrome://` pages and the Web Store can’t be scanned, inspected or scroll-captured; on `chrome://` pages a visible-area screenshot works.
 - Scroll-and-stitch uses window scrolling; inner scroll containers capture one viewport.
 - Cursor highlight is drawn in the page, so it shows in tab recordings and in screen recordings only over the browser tab.
 - Recordings are WebM. They are written to IndexedDB in 1-second chunks while recording, so long recordings don't live in memory; if a recording is interrupted (browser crash, recorder window closed, extension updated), the chunks are recovered into history as `…-recovered.webm`: right away for a closed recorder window or an update, otherwise on the next browser start.
@@ -48,7 +49,7 @@ npm run test:e2e -- --headed        # watch it run
 npm run test:e2e -- --only record   # run tests whose name contains "record"
 ```
 
-The e2e harness (`tests/e2e/`) loads the extension with the DevTools `Extensions.loadUnpacked` command over `--remote-debugging-pipe` (branded Chrome ignores `--load-extension`) and passes `--allowlisted-extension-id` so tab recording works without a toolbar click. It covers capture modes and formats, downloads, area/element selection, inspect mode, color picker, the editor, tab recording, recording failure cleanup, stopping a recording at the first failed chunk write, one-recording-at-a-time during setup, crash recovery, history limits, ZIP export (including a hanging asset), popup escaping of page-controlled CSS and the accessibility score. Set `CHROME_PATH` if Chrome isn't in the default location, and `EXTENSION_DIR` to run the suite against another copy of the extension.
+The e2e harness (`tests/e2e/`) loads the extension with the DevTools `Extensions.loadUnpacked` command over `--remote-debugging-pipe` (branded Chrome ignores `--load-extension`) and passes `--allowlisted-extension-id` so tab recording works without a toolbar click. Tests click the toolbar icon on the fixture tab (`Extensions.triggerAction`) to give LupaX access to it, as a user would. It covers capture modes and formats, downloads, area/element selection, inspect mode, color picker, the editor, tab recording, recording failure cleanup, stopping a recording at the first failed chunk write, one-recording-at-a-time during setup, crash recovery, history limits, ZIP export (including a hanging asset), popup escaping of page-controlled CSS and the accessibility score. Set `CHROME_PATH` if Chrome isn't in the default location, and `EXTENSION_DIR` to run the suite against another copy of the extension.
 
 Not covered automatically: window/desktop recording and desktop screenshots (they need a choice in Chrome's screen picker), and mic/webcam capture.
 

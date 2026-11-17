@@ -30,6 +30,10 @@ function toast(t) {
   setTimeout(() => el.classList.remove('show'), 1600);
 }
 
+// LupaX gets access to a tab when it's opened there; Chrome takes it back when the tab goes to another site
+const lostAccess = (e) => /respective host|missing host permission|'activeTab' permission/i.test(e?.message || '');
+const RECONNECT = 'LupaX no longer has access to this tab because it went to another site. Click the LupaX icon on that tab, then press Rescan.';
+
 async function run() {
   $('#root').innerHTML = '<div class="empty">Running checks…</div>';
   try {
@@ -39,7 +43,7 @@ async function run() {
     result = res.result;
     render();
   } catch (e) {
-    $('#root').innerHTML = `<div class="card summary"><h2>Can’t scan this tab</h2><p>${esc(e.message)}</p></div>`;
+    $('#root').innerHTML = `<div class="card summary"><h2>Can’t scan this tab</h2><p>${esc(lostAccess(e) ? RECONNECT : e.message)}</p></div>`;
   }
 }
 
@@ -87,8 +91,8 @@ function render() {
         await chrome.tabs.update(tabId, { active: true });
         const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: highlightOnPage, args: [it.selector, `${it.label} · ${it.detail}`.slice(0, 80)] });
         if (!res?.result) toast('Element not found — the page may have changed');
-      } catch {
-        toast('That tab is closed or can’t be scripted anymore');
+      } catch (e) {
+        toast(lostAccess(e) ? 'Click the LupaX icon on that tab to reconnect, then try again' : 'That tab is closed or can’t be scripted anymore');
       }
     };
   }
