@@ -67,3 +67,9 @@ test('every injected parse() copy is identical and reads rgb()/rgba() like lib/c
   }
   assert.equal(parse(''), null);
 });
+
+test('the scan and the inspector share one overMedia() rule', () => {
+  const copies = [...extract('lib/scan.js', 'overMedia'), ...extract('content/inspector.js', 'overMedia')];
+  assert.equal(copies.length, 2, 'expected overMedia() in scanA11y and the inspector — if one moved, update this test');
+  assert.equal(new Set(copies).size, 1, 'overMedia() copies have drifted apart');
+});

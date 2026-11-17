@@ -162,6 +162,32 @@ test('history, settings and accessibility report pages render without exceptions
   }
 });
 
+test('accessibility scan: text over images, hidden content and svg titles are not misreported', async () => {
+  const url = SITE.replace('site.html', 'a11y-edge.html');
+  await freshSite(url);
+  const r = await run(`const { scanA11y } = await import('./lib/scan.js');
+    const [t] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+    return (await chrome.scripting.executeScript({ target: { tabId: t.id }, func: scanA11y }))[0].result;`);
+  const byId = (id) => r.checks.find((c) => c.id === id);
+  assert.deepEqual(byId('contrast').items.map((i) => i.text), ['Really faded text'], 'only the real failure: not the photo heading, not the closed menu');
+  assert.deepEqual(byId('alt').items.map((i) => i.selector.split(' > ').pop()), ['#no-alt'], 'only the image without a name');
+  assert.equal(byId('alt').passed, 3, 'hero img (alt), svg (title), aria-hidden img');
+
+  // the in-page inspector uses the same rule for the photo heading
+  await send({ type: 'inspect', on: true });
+  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  const h = await site.evaluate(`(() => { const r = document.querySelector('.hero h2').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; })()`);
+  await site.click(h.x, h.y); // pin it: the panel opens
+  // the panel lives in a closed shadow root; CDP can still read it
+  const panelText = await waitFor(async () => {
+    const doc = JSON.stringify(await site.send('DOM.getDocument', { depth: -1, pierce: true }));
+    return doc.includes('Contrast') ? doc : null;
+  }, { label: 'inspector panel with contrast row' });
+  await send({ type: 'inspect', on: false });
+  assert.ok(panelText.includes('Over image'), 'inspector flags the photo heading instead of rating it Poor');
+  assert.ok(!panelText.includes('"Poor"'), 'not rated Poor');
+});
+
 test('report page survives a bad focus parameter and a scan that returns nothing', async () => {
   await freshSite();
   const tabId = await run(`return (await chrome.tabs.query({ url: ${JSON.stringify(SITE)} }))[0].id`);

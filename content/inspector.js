@@ -8,6 +8,7 @@
   const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
   const blend = (t, b) => { const a = t.a + b.a * (1 - t.a); return a ? { r: (t.r * t.a + b.r * b.a * (1 - t.a)) / a, g: (t.g * t.a + b.g * b.a * (1 - t.a)) / a, b: (t.b * t.a + b.b * b.a * (1 - t.a)) / a, a } : t; };
   const bgOf = (el) => { const L = []; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0) { L.push(c); if (c.a >= 1) break; } } let o = { r: 255, g: 255, b: 255, a: 1 }; for (let i = L.length - 1; i >= 0; i--) o = blend(L[i], o); return o; };
+  const overMedia = (el) => { const r = el.getBoundingClientRect(), area = r.width * r.height; const covers = (m) => { if (m === el || m.contains(el) || el.contains(m)) return false; const q = m.getBoundingClientRect(); const w = Math.min(r.right, q.right) - Math.max(r.left, q.left), h = Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top); return w > 0 && h > 0 && w * h >= 0.5 * area; }; for (let a = el; a && a.nodeType === 1; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.backgroundImage !== 'none') return true; for (const m of a.querySelectorAll('img, video, canvas')) if (covers(m)) return true; if ((parse(cs.backgroundColor)?.a || 0) >= 1) return false; } return false; };
   const name = (el) => el.tagName.toLowerCase() + (el.id ? '#' + el.id : typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/)[0] : '');
   const px = (v) => Math.round(parseFloat(v) * 10) / 10;
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -167,7 +168,8 @@
     const border = parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none' ? parse(cs.borderTopColor) : null;
     const ratio = fg ? (Math.max(lum(blend(fg, bg)), lum(bg)) + 0.05) / (Math.min(lum(blend(fg, bg)), lum(bg)) + 0.05) : null;
     const size = parseFloat(cs.fontSize), large = size >= 24 || (size >= 18.66 && +cs.fontWeight >= 700);
-    const rt = ratio == null ? null : ratio >= (large ? 4.5 : 7) ? ['Excellent', 'good', 'ok'] : ratio >= (large ? 3 : 4.5) ? ['Good', 'good', 'ok'] : ratio >= 3 ? ['Large only', 'warn', 'warn'] : ['Poor', 'bad', 'warn'];
+    const overImage = ratio != null && ratio < (large ? 3 : 4.5) && overMedia(el); // same rule as the accessibility scan
+    const rt = ratio == null ? null : overImage ? ['Over image', 'warn', 'warn'] : ratio >= (large ? 4.5 : 7) ? ['Excellent', 'good', 'ok'] : ratio >= (large ? 3 : 4.5) ? ['Good', 'good', 'ok'] : ratio >= 3 ? ['Large only', 'warn', 'warn'] : ['Poor', 'bad', 'warn'];
     const lh = cs.lineHeight === 'normal' ? 'normal' : `${px(cs.lineHeight)} px (${(parseFloat(cs.lineHeight) / size).toFixed(2)})`;
     const colorRow = (label, c) => c && c.a > 0 ? `<div class="kv"><span class="k">${label}</span><span class="sw" style="background:${hex(c)}"></span><span class="v">${hex(c)}</span><button class="cp" data-copy="${hex(c)}">${ICON.copy}</button></div>` : '';
     const side = (p) => ['Top', 'Right', 'Bottom', 'Left'].map((s) => px(cs[`${p}${s}`] ?? cs[p.replace('Width', '') + s]));
