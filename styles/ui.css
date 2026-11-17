@@ -139,7 +139,8 @@ a { color: var(--brand); text-decoration: none; }
 .cta .arrow { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); }
 .cta:hover { filter: brightness(1.05) saturate(1.05); }
 .cta:active { transform: translateY(1px); }
-.cta:disabled { filter: grayscale(.4); opacity: .7; }
+.cta:disabled, .cta.cta-split:has(> button:disabled) { filter: grayscale(.4); opacity: .55; }
+.cta.cta-split > button:disabled { cursor: default; }
 .cta.cta-split { padding: 0; gap: 0; }
 .cta.cta-split > button { flex: 1; height: 100%; background: transparent; border: 0; color: inherit; display: flex; align-items: center; justify-content: center; gap: 10px; font: inherit; position: relative; z-index: 1; }
 .cta.cta-split > button:hover { background: rgba(255,255,255,.08); }

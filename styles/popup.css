@@ -4,7 +4,7 @@ body.w-inspect { width: 580px; }
 body.w-assets { width: 800px; }
 
 #app { display: flex; flex-direction: column; max-height: 600px; background: linear-gradient(180deg, #091936 0%, var(--bg) 40%); overflow: hidden; }
-#app::before { top: 34px; right: 0; width: 300px; height: 150px; opacity: .45; }
+#app::before { top: 34px; right: 0; width: 300px; height: 150px; opacity: .22; }
 
 /* header */
 .hdr { display: flex; align-items: center; gap: 4px; padding: 12px 14px 2px 18px; flex: none; }
@@ -23,7 +23,7 @@ body.w-assets { width: 800px; }
 #view { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .scroll { overflow-y: auto; overflow-x: hidden; min-height: 0; flex: 1; padding: 0 18px 4px; }
 .foot { flex: none; padding: 8px 18px 14px; background: linear-gradient(180deg, rgba(6,18,48,0), var(--bg) 30%); }
-.v-title { font-size: 23px; font-weight: 800; letter-spacing: -.03em; margin: 2px 0 2px; line-height: 1.15; }
+.v-title { font-size: 23px; font-weight: 800; letter-spacing: -.03em; margin: 8px 0 2px; line-height: 1.15; }
 .v-sub { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.45; max-width: 420px; }
 .h-sec { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
 .h-sec h3 { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: -.01em; }
@@ -248,6 +248,18 @@ hr.div { border: 0; border-top: 1px solid var(--line); margin: 10px 0 0; }
 .donut .c { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .donut .c b { font-size: 28px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
 .donut .c span { font-size: 12px; color: var(--ink-2); font-weight: 600; margin-top: 3px; }
+/* the accessibility column next to Assets is ~250px wide: a smaller ring leaves room for the counts */
+.col-r .score { gap: 10px; padding: 10px 12px 10px 10px; }
+.col-r .donut { width: 92px; height: 92px; }
+.col-r .donut .c b { font-size: 22px; }
+.col-r .donut .c span { font-size: 11px; }
+.col-r .stat { gap: 6px; }
+
+/* pages Chrome won't let extensions read */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 28px 16px; margin-top: 12px; color: var(--muted); font-size: 12.5px; line-height: 1.45; border: 1px dashed var(--line-2); border-radius: 14px; }
+.empty-state .ico { width: 30px; height: 30px; color: var(--brand); margin-bottom: 4px; }
+.empty-state b { color: var(--ink); font-size: 14px; }
+.empty-state span { max-width: 340px; }
 .stats { flex: 1; display: flex; flex-direction: column; }
 .stat { display: flex; align-items: center; gap: 8px; min-height: 38px; border-bottom: 1px solid var(--line); font-weight: 650; font-size: 12.5px; }
 .stat:last-child { border-bottom: 0; }

@@ -2,7 +2,7 @@ import { icon, hydrateIcons } from '../../lib/icons.js';
 import { bytes, esc } from '../../lib/format.js';
 import { scanAssets, scanA11y } from '../../lib/scan.js';
 import { scoreDonut } from '../../lib/donut.js';
-import { $, $$, view, send, state, toast, copy, menu, loading, inject, pageBase, openPage, registerView } from '../core.js';
+import { $, $$, view, send, state, toast, copy, menu, loading, inject, pageBase, openPage, registerView, restrictedState } from '../core.js';
 
 const aState = { type: 'all', page: 1, per: 12, selected: new Set() };
 const TYPES = [
@@ -22,12 +22,12 @@ registerView('assets', async ({ focus, live }) => {
         <h1 class="v-title">Accessibility Insights</h1>
         <p class="v-sub">Key accessibility checks for this page.</p>
         <div class="scroll" id="a11yBody">${loading('Running checks…')}</div>
-        <div style="padding-top:12px"><button class="cta" id="report" style="height:48px;font-size:15.5px" disabled>${icon('sparkles')}View Detailed Analysis<span class="arrow">${icon('arrowRight')}</span></button></div>
+        <div style="padding-top:12px"><button class="cta" id="report" style="height:48px;font-size:15.5px" disabled>${icon('sparkles')}Full Report<span class="arrow">${icon('arrowRight')}</span></button></div>
       </div>
     </div>`;
   hydrateIcons(view);
   if (focus === 'a11y') $('.col-r').animate([{ background: 'rgba(122,184,245,.14)' }, { background: 'transparent' }], { duration: 1200 });
-  const showErr = (sel) => (e) => { if (live()) $(sel).innerHTML = `<div class="err-box">${esc(e.message)}</div>`; };
+  const showErr = (sel) => (e) => { if (live()) $(sel).innerHTML = state.restricted ? restrictedState() : `<div class="err-box">${esc(e.message)}</div>`; };
   const assetsP = (cache.assets ? Promise.resolve(cache.assets) : inject(scanAssets).then((r) => (cache.assets = r)))
     .then(() => live() && renderAssets()).catch(showErr('#aBody'));
   const a11yP = (cache.a11y ? Promise.resolve(cache.a11y) : inject(scanA11y).then((r) => (cache.a11y = r)))

@@ -3,7 +3,7 @@ import { putItem } from '../../lib/db.js';
 import { esc } from '../../lib/format.js';
 import { parseColor, rgbTriplet, hslTriplet, contrast, rating } from '../../lib/color.js';
 import { scanStyles } from '../../lib/scan.js';
-import { $, $$, view, send, state, toast, copy, menu, loading, inject, downloadBlob, pageBase, go, registerView } from '../core.js';
+import { $, $$, view, send, state, toast, copy, menu, loading, inject, downloadBlob, pageBase, go, registerView, restrictedState } from '../core.js';
 import { colorRoles, tokensJson, tokensCss, tokensTailwind, cssFor } from '../tokens.js';
 
 const insState = { color: 0, type: 0, allColors: false, allTypes: false, allStyles: false };
@@ -69,18 +69,19 @@ registerView('inspect', async ({ live }) => {
       <div id="insBody">${loading()}</div>
     </div>
     <div class="foot"><div class="cta cta-split">
-      <button id="copyAll">${icon('sparkles')}Copy All Values</button><i></i>
-      <button id="exportAll">${icon('layers')}Export Style Tokens<span class="arrow">${icon('arrowRight')}</span></button>
+      <button id="copyAll" disabled>${icon('sparkles')}Copy All Values</button><i></i>
+      <button id="exportAll" disabled>${icon('layers')}Export Style Tokens<span class="arrow">${icon('arrowRight')}</span></button>
     </div></div>`;
   hydrateIcons(view);
   try {
     state.cache.styles ??= await inject(scanStyles);
   } catch (e) {
-    if (live()) $('#insBody').innerHTML = `<div class="err-box" style="margin-top:14px">${esc(e.message)}</div>`;
+    if (live()) $('#insBody').innerHTML = state.restricted ? restrictedState() : `<div class="err-box" style="margin-top:14px">${esc(e.message)}</div>`;
     return;
   }
   if (!live()) return;
   const d = state.cache.styles;
+  $('#copyAll').disabled = $('#exportAll').disabled = false; // nothing to copy until the scan is in
   $('#copyAll').onclick = () => copy(tokensCss(d), 'all values as CSS variables');
   $('#exportAll').onclick = () => exportFile(tokensJson(d), 'json', 'application/json', 'styles');
   renderInspect(d);

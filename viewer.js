@@ -60,7 +60,13 @@ function videoView() {
   v.onloadedmetadata = () => { $('#dims').textContent = `${v.videoWidth}×${v.videoHeight} · ${bytes(item.blob.size)}`; };
   $('#stage').appendChild(v);
   actionBtn(`${icon('download')}Download WebM`, 'primary', () => download(item.blob, item.name));
-  actionBtn(`${icon('trash')}Delete`, 'danger', async () => { await deleteItem(id); window.close(); });
+  actionBtn(`${icon('trash')}Delete`, 'danger', () => confirmDelete());
+}
+
+async function confirmDelete() {
+  if (!confirm(`Delete “${item.name}”? This can’t be undone.`)) return;
+  await deleteItem(id);
+  window.close();
 }
 
 async function fileView() {
@@ -75,7 +81,7 @@ async function fileView() {
     $('#stage').innerHTML = `<div class="card file-card"><span class="tile">${icon(item.format === 'zip' ? 'zip' : 'layers')}</span><b>${esc(item.name)}</b><span class="muted">${bytes(item.blob.size)}</span></div>`;
   }
   actionBtn(`${icon('download')}Download`, 'primary', () => download(item.blob, item.name));
-  actionBtn(`${icon('trash')}Delete`, 'danger', async () => { await deleteItem(id); window.close(); });
+  actionBtn(`${icon('trash')}Delete`, 'danger', () => confirmDelete());
 }
 
 // ───────────────────────────── image editor ─────────────────────────────

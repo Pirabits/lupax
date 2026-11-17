@@ -139,6 +139,24 @@ test('asset scan: srcset URLs with commas, and inline SVGs that open and render 
   }
 });
 
+test('on a page Chrome won’t let extensions read, views explain why and keep actions disabled', async () => {
+  await freshSite('chrome://version/');
+  for (const v of ['inspect', 'assets']) {
+    await run(`await chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?view=${v}'), active: false })`);
+    const p = await b.attach((await b.waitForTarget((x) => x.url.includes(`popup.html?view=${v}`))).targetId);
+    try {
+      await waitFor(() => p.evaluate(`document.querySelectorAll('.empty-state').length`), { label: `${v} empty state` });
+      assert.equal(await p.evaluate(`document.querySelectorAll('.err-box').length`), 0, 'not shown as an error');
+      const disabled = await p.evaluate(`[...document.querySelectorAll('#copyAll, #exportAll, #report')].map((b) => b.disabled)`);
+      assert.ok(disabled.length && disabled.every(Boolean), `actions disabled in ${v}: ${disabled}`);
+      assert.deepEqual(p.exceptions(), []);
+    } finally {
+      await p.detach();
+      await b.send('Target.closeTarget', { targetId: p.targetId });
+    }
+  }
+});
+
 test('Export ZIP exports the whole selection, even from another category', async () => {
   await freshSite();
   // a background popup tab scans the active (fixture) tab, like the real popup

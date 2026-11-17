@@ -67,6 +67,9 @@ export async function shortcutMap() {
   return out;
 }
 
+/** Shown instead of results on pages Chrome doesn't let extensions read: not an error the user caused. */
+export const restrictedState = () => `<div class="empty-state">${icon('shield')}<b>LupaX can’t read this page</b><span>Chrome doesn’t let extensions inspect its own pages, the Web Store or the PDF viewer. Open a regular website and try again.</span></div>`;
+
 export async function inject(func) {
   if (state.restricted) throw new Error('This page can’t be inspected (browser or Web Store page).');
   const [res] = await chrome.scripting.executeScript({ target: { tabId: state.tab.id }, func });
