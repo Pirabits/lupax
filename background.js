@@ -17,6 +17,10 @@ const RECORDING_CANCELLED = 'Recording cancelled'; // also thrown by offscreen.j
 // ───────────────────────────── routing ─────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Only the extension's own pages (popup, history, report, offscreen, recorder) talk to the worker; code injected
+  // into web pages never sends messages. Ignoring everything else means a compromised page renderer can't drive
+  // captures or make the worker fetch arbitrary URLs with the extension's host access.
+  if (!sender.url?.startsWith(chrome.runtime.getURL(''))) return;
   if (msg?.target) return; // addressed to offscreen / recorder
   if (msg?.type === 'recording-started') {
     // the recorder window waits for this answer and only starts recording when the slot is granted
@@ -473,6 +477,7 @@ async function exportAssetsZip({ assets, title, url }, tab) {
     while (next < assets.length) {
       const i = next++;
       try {
+        if (!/^(https?|data):/i.test(assets[i].url)) throw new Error('unsupported URL'); // e.g. blob: (page-only), file:
         const res = await fetch(assets[i].url, { signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS) });
         if (res.ok) results[i] = { name: assetZipPath(assets[i]), data: new Uint8Array(await res.arrayBuffer()) };
       } catch { /* unreachable or timed out: skip */ }

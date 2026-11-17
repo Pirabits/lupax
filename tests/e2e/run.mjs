@@ -305,6 +305,17 @@ test('scans handle oklch()/lab() colors and elements with numeric values', async
   assert.ok(failed.includes('Barely visible oklch text'), `oklch low-contrast text is reported: ${JSON.stringify(contrast.items)}`);
 });
 
+test('the worker ignores messages from code running in a web page', async () => {
+  await setSettings({ capture: quietCapture });
+  await freshSite();
+  const prev = (await lastItem())?.id;
+  // a content-script context (what a compromised page renderer could reach) asks for a capture
+  await run(`const [t] = await chrome.tabs.query({ url: ${JSON.stringify(SITE)} });
+    await chrome.scripting.executeScript({ target: { tabId: t.id }, func: () => chrome.runtime.sendMessage({ type: 'capture', mode: 'visible' }).catch(() => {}) });`);
+  await sleep(2000);
+  assert.equal((await lastItem())?.id, prev, 'no capture from a page-originated message');
+});
+
 test('visible capture is stored as PNG', async () => {
   await setSettings({ capture: quietCapture });
   await freshSite();
