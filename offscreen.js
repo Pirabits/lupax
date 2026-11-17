@@ -8,6 +8,7 @@ import { composeWithCamera } from './lib/compose.js';
 import { chunkSink, stoppedEarlyNotice } from './lib/record-sink.js';
 
 const BLOB_URL_TTL_MS = 120_000;
+const CANCELLED = 'Recording cancelled'; // matched in background.js: a stop during the countdown is not an error
 let rec = null; // { recorder, sink, meta, thumb, release }
 const blobUrls = new Set();
 
@@ -92,11 +93,15 @@ async function grabThumb(track) {
 
 async function begin() {
   if (!rec) throw new Error('Recording was not prepared');
+  if (rec.cancelled) { reset(); throw new Error(CANCELLED); }
   rec.recorder.start(1000);
 }
 
 function stop() {
-  if (rec?.recorder && rec.recorder.state !== 'inactive') rec.recorder.stop();
+  if (!rec) return;
+  // prepared but not started (countdown), e.g. the tab was closed: begin() abandons it instead of recording
+  if (rec.recorder.state === 'inactive') rec.cancelled = true;
+  else rec.recorder.stop();
 }
 
 /** Abandon a prepared or running recording without saving it. */

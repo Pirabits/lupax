@@ -12,6 +12,7 @@ const MAX_AREA = 250_000_000;
 // Clipboard images travel to the page as base64 script arguments; past this size we skip the copy and say so.
 const CLIPBOARD_MAX_BYTES = 20 * 1024 * 1024;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const RECORDING_CANCELLED = 'Recording cancelled'; // also thrown by offscreen.js begin()
 
 // ───────────────────────────── routing ─────────────────────────────
 
@@ -96,7 +97,22 @@ async function inject(tabId, func, args = []) {
 
 // ───────────────────────────── screenshots ─────────────────────────────
 
+// One capture at a time: two scroll-and-stitch runs on the same tab would capture each other's scroll
+// positions and restore each other's hidden sticky headers. Kept in memory: a capture keeps the worker alive.
+let capturing = false;
+
 async function runCapture(tab, mode, delay) {
+  if (mode === 'desktop') return openRecorderWindow('screenshot');
+  if (capturing) throw new Error('A capture is already in progress');
+  capturing = true;
+  try {
+    return await runCaptureMode(tab, mode, delay);
+  } finally {
+    capturing = false;
+  }
+}
+
+async function runCaptureMode(tab, mode, delay) {
   const s = (await getSettings()).capture;
   delay ??= s.delay;
   switch (mode) {
@@ -127,16 +143,15 @@ async function runCapture(tab, mode, delay) {
     }
     case 'full':
       return captureRegion(tab, null, { hideFixed: s.hideFixed });
-    case 'desktop':
-      return openRecorderWindow('screenshot');
   }
 }
 
 let lastCaptureAt = 0;
 async function captureTab(windowId) {
-  const wait = lastCaptureAt + CAPTURE_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  lastCaptureAt = Date.now();
+  // reserve the slot before waiting, so concurrent callers (capture + color picker) queue instead of colliding
+  const at = Math.max(Date.now(), lastCaptureAt + CAPTURE_GAP_MS);
+  lastCaptureAt = at;
+  if (at > Date.now()) await sleep(at - Date.now());
   return chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
 }
 
@@ -325,6 +340,7 @@ async function startRecording(options, tab) {
     });
     if (!res?.ok) throw new Error(res?.error || 'Could not start recording');
     if (options.countdown) await inject(tab.id, showCountdown, [options.countdown]).catch(() => sleep(options.countdown * 1000));
+    if ((await getRecording())?.cancelled) throw new Error(RECORDING_CANCELLED);
     const go = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'begin' });
     if (!go?.ok) throw new Error(go?.error || 'Could not start recording');
   } catch (e) {
@@ -332,6 +348,7 @@ async function startRecording(options, tab) {
     await chrome.runtime.sendMessage({ target: 'offscreen', type: 'reset' }).catch(() => {});
     await clearRecording();
     await closeOffscreenIfIdle();
+    if (e?.message === RECORDING_CANCELLED) return; // stopped during setup or countdown: nothing to report
     throw e;
   }
   await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, startedAt: Date.now(), pausedTotal: 0 } });
@@ -344,6 +361,12 @@ async function stopRecording() {
   if (!rec) return;
   // still in the screen picker or countdown: closing the recorder window cancels it (onRemoved frees the slot)
   if (rec.starting && rec.kind === 'desktop') return chrome.windows.remove(rec.windowId).catch(() => {});
+  if (rec.starting) {
+    // still setting up or counting down: startRecording checks this flag before it begins, and the offscreen document
+    // abandons a prepared recording on stop
+    await chrome.storage.session.set({ recording: { ...rec, cancelled: true } });
+    inject(rec.tabId, removeCountdown).catch(() => {});
+  }
   await chrome.runtime.sendMessage({ target: rec.kind === 'tab' ? 'offscreen' : 'recorder', type: 'stop' }).catch(() => {});
 }
 
@@ -517,6 +540,7 @@ function pageToast(text, kind = 'ok') {
 function showCountdown(secs) {
   return new Promise((resolve) => {
     const host = document.createElement('div');
+    host.dataset.lupaxCountdown = '';
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none';
     const sh = host.attachShadow({ mode: 'closed' });
     sh.innerHTML = `<style>
@@ -536,6 +560,11 @@ function showCountdown(secs) {
     };
     tick();
   });
+}
+
+function removeCountdown() {
+  for (const el of document.querySelectorAll('[data-lupax-countdown]')) el.remove();
+  return true;
 }
 
 function cursorFx(on) {

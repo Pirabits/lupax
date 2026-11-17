@@ -102,6 +102,31 @@ test('popup renders every view without exceptions', async () => {
   assert.deepEqual(errs, [], 'uncaught exceptions in popup');
 });
 
+test('Export ZIP exports the whole selection, even from another category', async () => {
+  await freshSite();
+  // a background popup tab scans the active (fixture) tab, like the real popup
+  await run(`await chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?view=assets'), active: false })`);
+  const p = await b.attach((await b.waitForTarget((x) => x.url.includes('popup.html?view=assets'))).targetId);
+  try {
+    await waitFor(() => p.evaluate(`document.querySelectorAll('.acard').length`), { label: 'asset cards', ms: 8000 });
+    // record what Export sends instead of downloading
+    await p.evaluate(`window.__zips = []; const real = chrome.runtime.sendMessage.bind(chrome.runtime);
+      chrome.runtime.sendMessage = (m, ...r) => m?.type === 'export-zip' ? (window.__zips.push(m), Promise.resolve({ ok: true })) : real(m, ...r); true`);
+    const click = (sel) => p.evaluate(`document.querySelector(${JSON.stringify(sel)}).click(); true`);
+    await click('[data-type="svg"]');
+    const picked = await p.evaluate(`document.querySelector('.acard .cb').click(); document.querySelector('.acard b')?.textContent`);
+    await click('[data-type="icon"]'); // a category the selected SVG is not in
+    assert.equal(await p.evaluate(`document.getElementById('zip').disabled`), false, 'Export enabled while something is selected');
+    await click('#zip');
+    const sent = await waitFor(() => p.evaluate('window.__zips[0]?.assets'), { label: 'export-zip message' });
+    assert.deepEqual(sent.map((a) => a.name), [picked]);
+    assert.deepEqual(p.exceptions(), []);
+  } finally {
+    await p.detach();
+    await b.send('Target.closeTarget', { targetId: p.targetId });
+  }
+});
+
 test('style inspector escapes page-controlled CSS in component previews', async () => {
   await freshSite(SITE.replace('site.html', 'hostile.html'));
   // a background popup tab in the same window scans the active (hostile) tab, like the real popup
@@ -198,6 +223,24 @@ test('full-page capture stitches beyond the viewport', async () => {
   const it = await newItem(prev, { ms: 20000 });
   assert.ok(docH > vh * 1.5, `fixture should be taller than the viewport (${docH} vs ${vh})`);
   assert.equal(it.height, docH);
+});
+
+test('a second capture while one is running is refused and leaves the page intact', async () => {
+  await setSettings({ capture: { ...quietCapture, hideFixed: true } });
+  await freshSite();
+  await resetBadge();
+  await site.evaluate(`document.body.insertAdjacentHTML('afterbegin', '<div id="stick" style="position:sticky;top:0;height:40px;background:#ccc">sticky</div>'); true`);
+  const count = () => db('return (await db.listItems({ limit: 200 })).length');
+  const before = await count();
+  // e.g. the full-page shortcut pressed twice
+  await Promise.all([send({ type: 'capture', mode: 'full' }), send({ type: 'capture', mode: 'full' })]);
+  const err = await waitFor(async () => { const t = (await badge()).title; return t.includes('already') ? t : null; }, { label: 'busy error', ms: 5000 });
+  assert.match(err, /A capture is already in progress/);
+  await waitFor(async () => (await count()) > before, { label: 'capture saved', ms: 20000 });
+  await sleep(2500); // a second run would still be stitching
+  assert.equal(await count(), before + 1, 'exactly one capture was saved');
+  const page = await site.evaluate(`({ vis: document.getElementById('stick').style.visibility, sb: document.documentElement.style.scrollBehavior, fixed: (window.__ixFixed || []).length })`);
+  assert.deepEqual(page, { vis: '', sb: '', fixed: 0 }, 'sticky header and scroll-behavior restored');
 });
 
 test('JPG and PDF output formats', async () => {
@@ -324,6 +367,22 @@ test('tab recording saves a WebM and streams chunks to IndexedDB while recording
   assert.ok(it.size > 1000);
   assert.ok(chunksWhileRecording >= 2, `expected chunks persisted during recording, got ${chunksWhileRecording}`);
   assert.equal(await db(`return db.countChunks()`), 0, 'chunks cleaned up after save');
+});
+
+test('stopping during the countdown cancels the tab recording quietly', async () => {
+  await freshSite();
+  await resetBadge();
+  const prev = (await lastItem())?.id;
+  await send({ type: 'record-start', options: { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 3, quality: '720', fps: 24 } });
+  await waitFor(() => site.evaluate('!!document.querySelector("[data-lupax-countdown]")'), { label: 'countdown overlay', ms: 8000 });
+  await send({ type: 'record-stop' });
+  await waitFor(async () => !(await site.evaluate('!!document.querySelector("[data-lupax-countdown]")')), { label: 'countdown removed on stop', ms: 2000 });
+  await sleep(4500); // past the end of the countdown, when the recording used to begin anyway
+  assert.equal(await run(`return (await chrome.storage.session.get('recording')).recording ?? null`), null, 'recording slot freed');
+  assert.deepEqual(await badge(), { text: '', title: 'LupaX' }, 'no REC badge and no error');
+  const captured = await run(`return (await chrome.tabCapture.getCapturedTabs()).filter((c) => c.status === 'active' || c.status === 'pending').length`);
+  assert.equal(captured, 0, 'tab released');
+  assert.equal((await lastItem())?.id, prev, 'nothing saved');
 });
 
 test('recording setup failure releases the tab, reports the error in the page, and allows a retry', async () => {

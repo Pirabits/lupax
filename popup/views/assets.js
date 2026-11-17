@@ -44,6 +44,8 @@ function renderAssets() {
   const pageItems = list.slice((aState.page - 1) * aState.per, aState.page * aState.per);
   const totalSize = list.reduce((s, a) => s + (a.size || 0), 0);
   const allSelected = list.length && list.every((a) => aState.selected.has(a.url));
+  // a selection spans every category: exporting from another filter must not drop it
+  const toExport = aState.selected.size ? all.filter((a) => aState.selected.has(a.url)) : list;
 
   const pageBtns = [];
   const addPg = (p) => pageBtns.push(`<button class="pg ${p === aState.page ? 'on' : ''}" data-pg="${p}">${p}</button>`);
@@ -60,7 +62,7 @@ function renderAssets() {
       <label><input type="checkbox" class="cb" id="selAll" ${allSelected ? 'checked' : ''}/>${aState.selected.size ? `${aState.selected.size} selected` : 'Select all'}</label>
       <span class="spacer"></span>
       <span class="sum">${list.length} assets • ${bytes(totalSize)}</span>
-      <button class="btn primary" id="zip" ${list.length ? '' : 'disabled'}>${icon('download')}Export ZIP</button>
+      <button class="btn primary" id="zip" ${toExport.length ? '' : 'disabled'}>${icon('download')}Export ZIP</button>
     </div>
     ${state.cache.assets.truncated ? '<p class="muted" style="margin:0 0 8px;font-size:12px">Large page: only the first 9,000 elements were scanned for background images, so some assets may be missing.</p>' : ''}
     <div class="agrid" id="agrid">${pageItems.map((a, i) => assetCard(a, i)).join('') || '<div class="empty" style="grid-column:1/-1">No assets in this category.</div>'}</div>
@@ -77,7 +79,7 @@ function renderAssets() {
   $$('[data-pg]').forEach((b) => (b.onclick = () => { aState.page = +b.dataset.pg; renderAssets(); $('#agrid').scrollTop = 0; }));
   $('#per').onchange = (e) => { aState.per = +e.target.value; aState.page = 1; renderAssets(); };
   $('#selAll').onchange = (e) => { for (const a of list) e.target.checked ? aState.selected.add(a.url) : aState.selected.delete(a.url); renderAssets(); };
-  $('#zip').onclick = () => exportZip(list.filter((a) => !aState.selected.size || aState.selected.has(a.url)));
+  $('#zip').onclick = () => exportZip(toExport);
   for (const card of $$('.acard')) {
     const a = pageItems[+card.dataset.i];
     $('.cb', card).onchange = (e) => { e.target.checked ? aState.selected.add(a.url) : aState.selected.delete(a.url); renderAssets(); };
