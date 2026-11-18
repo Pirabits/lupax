@@ -11,22 +11,25 @@ const BLOB_URL_TTL_MS = 120_000;
 const CANCELLED = 'Recording cancelled'; // matched in background.js: a stop during the countdown is not an error
 let rec = null; // { recorder, sink, meta, thumb, release }
 let saving = 0; // recordings stopped but still being written to history
+let preparing = 0; // recordings acquiring their streams (rec is set only once that is done)
 const blobUrls = new Set();
 
-chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.target !== 'offscreen') return;
+  // only the extension's own contexts; scripts LupaX injects into pages never message this document
+  if (!sender.url?.startsWith(chrome.runtime.getURL(''))) return;
   const reply = (p) => p.then(
     (value) => sendResponse({ ok: true, ...value }),
     (e) => sendResponse({ ok: false, error: e?.message || String(e), errorName: e?.name, device: e?.device }),
   );
   switch (msg.type) {
-    case 'prepare': reply(prepare(msg)); return true;
+    case 'prepare': preparing++; reply(prepare(msg).finally(() => preparing--)); return true;
     case 'begin': reply(begin()); return true;
     case 'reset': reset(); sendResponse({ ok: true }); break;
     case 'pause': rec?.recorder?.state === 'recording' && rec.recorder.pause(); sendResponse({ ok: true }); break;
     case 'resume': rec?.recorder?.state === 'paused' && rec.recorder.resume(); sendResponse({ ok: true }); break;
     case 'stop': stop(); sendResponse({ ok: true }); break;
-    case 'status': sendResponse({ ok: true, recording: !!rec || saving > 0, blobUrls: blobUrls.size }); break;
+    case 'status': sendResponse({ ok: true, recording: !!rec || saving > 0 || preparing > 0, blobUrls: blobUrls.size }); break;
     case 'blob-url': reply(blobUrl(msg.id)); return true;
   }
 });

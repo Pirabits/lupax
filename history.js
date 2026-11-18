@@ -8,9 +8,9 @@ const FILTERS = [['all', 'All', null], ['image', 'Screenshots', 'camera'], ['vid
 let filter = new URLSearchParams(location.search).get('filter') || 'all';
 let items = [];
 
-function toast(t) {
+function toast(t, ic = 'checkCircle') {
   const el = $('#toast');
-  el.innerHTML = `${icon('checkCircle')}<span>${esc(t)}</span>`;
+  el.innerHTML = `${icon(ic)}<span>${esc(t)}</span>`;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 1600);
 }
@@ -46,9 +46,15 @@ function render() {
     card.querySelector('[data-open]').onclick = () => chrome.tabs.create({ url: `viewer.html?id=${id}` });
     card.querySelector('[data-dl]').onclick = async () => {
       const it = await getItem(id);
+      // pruned or deleted from another tab since this list was drawn
+      if (!it?.blob) { toast('This item is no longer in history', 'alert'); load(); return; }
       const url = URL.createObjectURL(it.blob);
-      await chrome.downloads.download({ url, filename: `LupaX/${it.name}`, conflictAction: 'uniquify' });
-      toast(`Downloading ${it.name}`);
+      try {
+        await chrome.downloads.download({ url, filename: `LupaX/${it.name}`, conflictAction: 'uniquify' });
+        toast(`Downloading ${it.name}`);
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 60_000); // the download reads the blob after download() resolves
+      }
     };
     card.querySelector('[data-del]').onclick = async () => {
       // the trash icon sits right next to Download: ask first

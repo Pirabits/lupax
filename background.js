@@ -49,6 +49,9 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 chrome.runtime.onStartup.addListener(() => recoverOrphanRecordings().catch(reportError));
 // an update or reload ends any recording mid-way; its chunks would otherwise wait for the next browser launch
 chrome.runtime.onInstalled.addListener(() => recoverOrphanRecordings().catch(reportError));
+// site access an unfinished ZIP export left behind
+chrome.runtime.onStartup.addListener(() => dropLeftoverExportGrants().catch(() => {}));
+chrome.runtime.onInstalled.addListener(() => dropLeftoverExportGrants().catch(() => {}));
 
 chrome.windows.onRemoved.addListener(async (windowId) => {
   const rec = await getRecording();
@@ -92,7 +95,7 @@ async function handle(msg) {
     case 'show-capture': return openViewer(msg.id);
     case 'pick-color': return pickColor(await activeTab());
     case 'inspect': return toggleInspect(await activeTab(), msg.on);
-    case 'export-zip': return exportAssetsZip(msg, await activeTab().catch(() => null));
+    case 'export-zip': return exportAssetsZip(msg, activeTab().catch(() => null));
     case 'access-denied': if (accessDenied === false) accessDenied = true; return;
   }
 }
@@ -362,13 +365,19 @@ async function ensureOffscreen() {
   await offscreenCreating;
 }
 
-/** Close the offscreen document unless it is recording or still serving a download URL. */
-async function closeOffscreenIfIdle() {
-  const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
-  if (!ctx.length) return;
-  const st = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'status' }).catch(() => null);
-  if (st?.recording || st?.blobUrls) return;
-  await chrome.offscreen.closeDocument().catch(() => {});
+/**
+ * Close the offscreen document unless it is recording or still serving a download URL. Runs in the recording-slot
+ * queue and keeps the document while any recording holds the slot: a tab recording started right after another one
+ * ended reuses this document, and would otherwise lose it between reserving the slot and its streams being set up.
+ */
+function closeOffscreenIfIdle() {
+  return reserveSlot(async () => {
+    const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+    if (!ctx.length || (await getRecording())) return;
+    const st = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'status' }).catch(() => null);
+    if (st?.recording || st?.blobUrls) return;
+    await chrome.offscreen.closeDocument().catch(() => {});
+  });
 }
 
 /** tab: the tab to record; defaults to the active tab, looked up only after the recording slot is known to be free. */
@@ -390,6 +399,8 @@ async function startRecording(options, tab) {
       meta: { title: tab.title, url: tab.url, name: baseName(tab.title, tab.url) },
     });
     if (!res?.ok) throw Object.assign(new Error(res?.error || 'Could not start recording'), { name: res?.errorName || 'Error', device: res?.device });
+    // a stop while the streams were being set up: don't show the countdown at all
+    if ((await getRecording())?.cancelled) throw new Error(RECORDING_CANCELLED);
     if (options.countdown) await inject(tab.id, showCountdown, [options.countdown]).catch(() => sleep(options.countdown * 1000));
     if ((await getRecording())?.cancelled) throw new Error(RECORDING_CANCELLED);
     const go = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'begin' });
@@ -409,6 +420,10 @@ async function startRecording(options, tab) {
     }
     throw e;
   }
+  // a stop that arrived after the last check above already reached the offscreen document, which stops the recorder
+  // and saves; mark the slot as recording only if it is still this start's
+  const cur = await getRecording();
+  if (!cur?.starting || cur.cancelled || cur.tabId !== tab.id) return;
   await chrome.storage.session.set({ recording: { kind: 'tab', source: 'tab', tabId: tab.id, startedAt: Date.now(), pausedTotal: 0 } });
   await setRecBadge(true);
   if (options.cursor) await inject(tab.id, cursorFx, [true]).catch(() => {});
@@ -486,6 +501,11 @@ async function toggleInspect(tab, on) {
 
 const ASSET_FETCH_TIMEOUT_MS = 10_000;
 const ASSET_FETCH_CONCURRENCY = 4;
+// The ZIP writer has no Zip64, so an archive must stay under 4 GB and 65,535 entries; the worker also holds every
+// asset in memory until the ZIP is built.
+const ASSET_MAX_BYTES = 100 * 1024 * 1024;
+const ZIP_MAX_BYTES = 1024 * 1024 * 1024;
+const ZIP_MAX_ENTRIES = 10_000;
 
 const ACCESS_WAIT_MS = 60_000;
 let accessDenied = null; // set by the popup when the user declines the site-access prompt
@@ -508,23 +528,89 @@ async function waitForAccess(origins) {
   }
 }
 
+/**
+ * Site access granted for an export is given back when the export ends: the sites come from the page, so keeping them
+ * would leave LupaX with standing access to sites the user never chose to use it on. Exports running at the same time
+ * share a grant until the last of them ends. The list is also kept in storage, so access left over by an export the
+ * worker didn't finish (browser closed, worker killed) is removed at the next start.
+ */
+const exportGrants = new Map(); // origin pattern → running exports that hold it
+async function holdExportGrants(origins) {
+  const list = origins || [];
+  const had = await Promise.all(list.map((o) => exportGrants.has(o) ? false : chrome.permissions.contains({ origins: [o] })));
+  const held = list.filter((_, i) => !had[i]);
+  for (const o of held) exportGrants.set(o, (exportGrants.get(o) || 0) + 1);
+  await chrome.storage.local.set({ exportGrants: [...exportGrants.keys()] });
+  return held;
+}
+async function releaseExportGrants(held) {
+  const drop = held.filter((o) => {
+    const n = (exportGrants.get(o) || 1) - 1;
+    if (n > 0) exportGrants.set(o, n); else exportGrants.delete(o);
+    return n <= 0;
+  });
+  if (drop.length) await chrome.permissions.remove({ origins: drop }).catch(() => {});
+  await chrome.storage.local.set({ exportGrants: [...exportGrants.keys()] });
+}
+async function dropLeftoverExportGrants() {
+  const { exportGrants: left } = await chrome.storage.local.get('exportGrants');
+  if (left?.length && !exportGrants.size) await chrome.permissions.remove({ origins: left }).catch(() => {});
+  await chrome.storage.local.remove('exportGrants');
+}
+
+/** The response body, or null when it is larger than `max` bytes (by its header, or once that many have arrived). */
+async function readCapped(res, max) {
+  if (+res.headers.get('content-length') > max) { res.body?.cancel().catch(() => {}); return null; }
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const parts = [];
+  let size = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > max) { reader.cancel().catch(() => {}); return null; }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  for (let i = 0, at = 0; i < parts.length; at += parts[i].length, i++) out.set(parts[i], at);
+  return out;
+}
+
 /** Runs here rather than in the popup so closing the popup doesn't lose the export. */
-async function exportAssetsZip({ assets, title, url, origins }, tab) {
+async function exportAssetsZip({ assets, title, url, origins }, tabP) {
+  // checked first thing, before the user can answer the prompt the popup shows right after sending this
+  const held = await holdExportGrants(origins);
+  try {
+    await buildAssetsZip({ assets, title, url, origins }, await tabP);
+  } finally {
+    await releaseExportGrants(held);
+  }
+}
+
+async function buildAssetsZip({ assets, title, url, origins }, tab) {
+  if (assets.length > ZIP_MAX_ENTRIES) throw new Error(`Select at most ${ZIP_MAX_ENTRIES.toLocaleString('en-US')} assets per export`);
   // without access, assets on sites that allow it (CORS) still download; the rest are counted as unreachable
   const access = await waitForAccess(origins);
   // a few fetches at a time, each with a timeout, so one slow or hanging asset can't stall the export
   const results = new Array(assets.length);
-  let next = 0, fetched = 0;
+  let next = 0, fetched = 0, total = 0, tooLarge = 0;
   await setProgressBadge(0, assets.length);
   const worker = async () => {
     while (next < assets.length) {
       const i = next++;
       try {
         if (!/^(https?|data):/i.test(assets[i].url)) throw new Error('unsupported URL'); // e.g. blob: (page-only), file:
-        const res = await fetch(assets[i].url, { signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS) });
-        if (res.ok) results[i] = { name: assetZipPath(assets[i]), data: new Uint8Array(await res.arrayBuffer()) };
-      } catch { /* unreachable or timed out: skip */ }
-      await setProgressBadge(++fetched, assets.length);
+        // no cookies: the export downloads what the page shows publicly, never as the user's session on that site
+        const res = await fetch(assets[i].url, { credentials: 'omit', signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS) });
+        if (!res.ok) { res.body?.cancel().catch(() => {}); continue; }
+        const data = await readCapped(res, Math.min(ASSET_MAX_BYTES, ZIP_MAX_BYTES - total));
+        if (!data) { tooLarge++; continue; }
+        total += data.length;
+        results[i] = { name: assetZipPath(assets[i]), data };
+      } catch { /* unreachable or timed out: skip */ } finally {
+        await setProgressBadge(++fetched, assets.length);
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(ASSET_FETCH_CONCURRENCY, assets.length) }, worker));
@@ -537,8 +623,9 @@ async function exportAssetsZip({ assets, title, url, origins }, tab) {
   const name = `${baseName(title, url)}-assets.zip`;
   const id = await putItem({ kind: 'file', format: 'zip', name, blob: makeZip(files), title, url });
   await downloadItem(id, `LupaX/${name}`);
-  const skipped = assets.length - files.length;
-  if (tab) inject(tab.id, pageToast, [`Exported ${files.length} assets${skipped ? ` · ${skipped} unreachable` : ''}`]).catch(() => {});
+  const skipped = assets.length - files.length - tooLarge;
+  const notes = [skipped && `${skipped} unreachable`, tooLarge && `${tooLarge} too large`].filter(Boolean).map((n) => ` · ${n}`).join('');
+  if (tab) inject(tab.id, pageToast, [`Exported ${files.length} assets${notes}`]).catch(() => {});
 }
 
 // ───────────────────────────── errors ─────────────────────────────

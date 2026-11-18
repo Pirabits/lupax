@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LupaX Privacy Policy</title>
+<style>
+  :root { color-scheme: light dark; --fg: #10182b; --muted: #55607a; --bg: #ffffff; --line: #e3e7ef; --accent: #2b78d0; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8ecf4; --muted: #9aa5bd; --bg: #0b1222; --line: #1f2a40; --accent: #7ab8f5; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 32px; line-height: 1.2; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 36px 0 8px; }
+  p, li { color: var(--fg); }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>LupaX Privacy Policy</h1>
+  <p class="muted">Effective November 18, 2026</p>
+
+  <p>LupaX is a Chrome extension for capturing and inspecting web pages. Everything it captures or produces stays on your device. LupaX has no servers and no accounts, and it does not collect analytics, telemetry or crash reports. Nothing you capture is sent to the developer or to anyone else.</p>
+
+  <h2>What LupaX handles, and where it stays</h2>
+  <table>
+    <thead><tr><th>Data</th><th>When</th><th>Where it is kept</th></tr></thead>
+    <tbody>
+      <tr><td>Screenshots of web pages, windows or your screen</td><td>When you take a screenshot</td><td>On your device, in the extension's local history, and in your Downloads folder if you save them</td></tr>
+      <tr><td>Recordings of a tab, a window or your screen, with microphone audio and webcam video if you turn them on</td><td>Only while a recording you started is running</td><td>On your device, in the extension's local history, and in your Downloads folder</td></tr>
+      <tr><td>Page content: styles, colors, fonts, images and other assets, and the results of accessibility checks</td><td>When you open LupaX on a page and use the inspector, Style Inspector, Asset Explorer or accessibility checks</td><td>In memory while you use it; in a file only when you export or download</td></tr>
+      <tr><td>The address and title of a captured page</td><td>Stored with each capture so you can tell captures apart</td><td>On your device, in the extension's local history</td></tr>
+      <tr><td>Your settings and picked colors</td><td>When you change them</td><td>On your device, in Chrome's extension storage</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Network requests</h2>
+  <p>LupaX makes network requests only to download a page's own assets (images, SVGs and fonts) from the sites that host them, when you view or export them in the Asset Explorer. These requests are sent without your cookies. Exporting assets from other sites asks for your permission first, and that access is removed when the export ends. LupaX loads no remote code.</p>
+
+  <h2>Microphone, camera and screen</h2>
+  <p>LupaX uses the microphone and camera only during a recording you start with those options turned on, and screen or window capture only after you choose what to share in Chrome's picker. They are released as soon as the recording or screenshot ends.</p>
+
+  <h2>How long data is kept, and how to delete it</h2>
+  <p>History keeps your latest 20 recordings and 60 other items (screenshots and exports); older items are removed automatically. You can delete any item from the History page, or everything from Settings, at any time. Uninstalling LupaX deletes its history and settings. Files you downloaded stay in your Downloads folder until you delete them.</p>
+
+  <h2>Sharing and sale of data</h2>
+  <p>LupaX does not sell or transfer your data to third parties, does not use it for advertising, and does not use it to determine creditworthiness or for lending purposes. Its use of data is limited to providing the features described here, in line with the Chrome Web Store User Data Policy, including its Limited Use requirements.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes, the new version will be posted on this page with a new effective date.</p>
+
+  <h2>Contact</h2>
+  <!-- TODO before publishing: replace with the support address -->
+  <p>Questions about this policy: <a href="mailto:SUPPORT_EMAIL">SUPPORT_EMAIL</a></p>
+</main>
+</body>
+</html>

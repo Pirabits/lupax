@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LupaX",
   "version": "1.0.0",
-  "description": "All-in-one web inspector: screenshots, screen recording, style inspection, asset extraction and accessibility checks.",
+  "description": "Capture and inspect web pages: screenshots, recordings, CSS styles, assets and accessibility checks for designers and devs.",
   "minimum_chrome_version": "116",
   "permissions": [
     "activeTab",

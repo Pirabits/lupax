@@ -2,6 +2,7 @@ import { icon, hydrateIcons } from '../../lib/icons.js';
 import { bytes, esc } from '../../lib/format.js';
 import { scanAssets, scanA11y } from '../../lib/scan.js';
 import { scoreDonut } from '../../lib/donut.js';
+import { safeAssetName } from '../../lib/zip.js';
 import { $, $$, view, send, state, toast, copy, menu, loading, inject, pageBase, openPage, registerView, restrictedState } from '../core.js';
 
 const aState = { type: 'all', page: 1, per: 12, selected: new Set() };
@@ -106,7 +107,7 @@ function assetCard(a, i) {
   return `<div class="card acard ${aState.selected.has(a.url) ? 'sel' : ''}" data-i="${i}">
     <input type="checkbox" class="cb" ${aState.selected.has(a.url) ? 'checked' : ''} />
     <div class="th ${checker ? 'checker' : ''}" title="${esc(a.url.startsWith('data:') ? a.name : a.url)}" style="${a.type === 'font' ? 'background:var(--surface-2)' : ''}">${thumb}</div>
-    <div class="inf"><b title="${esc(a.family || a.name)}">${esc(a.name)}</b>
+    <div class="inf"><b title="${esc(a.family || safeAssetName(a))}">${esc(safeAssetName(a))}</b>
       <div class="row"><span class="badge">${esc(fmt)}</span><span data-size="${esc(a.url)}">${a.size ? bytes(a.size) : a.w ? `${a.w}×${a.h}` : '—'}</span></div></div>
     <button class="icon-btn" data-more>${icon('dots')}</button>
   </div>`;
@@ -115,7 +116,7 @@ function assetCard(a, i) {
 async function loadFontPreviews(items) {
   for (const a of items.filter((x) => x.type === 'font')) {
     try {
-      const buf = await (await fetch(a.url)).arrayBuffer();
+      const buf = await (await fetch(a.url, { credentials: 'omit' })).arrayBuffer();
       if (!a.size) a.size = buf.byteLength;
       const fam = `ixf-${Math.abs([...a.url].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 7))}`;
       const ff = new FontFace(fam, buf);
@@ -132,7 +133,7 @@ async function fillSizes(items) {
   let changed = false;
   await Promise.all(todo.map(async (a) => {
     try {
-      const res = await fetch(a.url, { method: 'HEAD' });
+      const res = await fetch(a.url, { method: 'HEAD', credentials: 'omit' });
       const len = +res.headers.get('content-length');
       if (len) { a.size = len; changed = true; for (const el of $$(`[data-size="${CSS.escape(a.url)}"]`)) el.textContent = bytes(len); }
     } catch {}
@@ -146,8 +147,9 @@ async function fillSizes(items) {
 }
 
 async function downloadAsset(a) {
-  await chrome.downloads.download({ url: a.url, filename: `LupaX/${pageBase()}/${a.name}`, conflictAction: 'uniquify' });
-  toast(`Downloading ${a.name}`);
+  const name = safeAssetName(a);
+  await chrome.downloads.download({ url: a.url, filename: `LupaX/${pageBase()}/${name}`, conflictAction: 'uniquify' });
+  toast(`Downloading ${name}`);
 }
 
 /** The site patterns an export needs access to: LupaX only has access to the tab it was opened on. */
