@@ -46,6 +46,9 @@
   .btn.primary:hover { background: #8fc4f7; }
   .btn.ghost { color: var(--ink); border-color: var(--line-2); background: transparent; }
   .btn.ghost:hover { border-color: var(--brand); }
+  .btn.store[aria-disabled="true"] { cursor: default; opacity: .9; }
+  .btn.store[aria-disabled="true"]:hover { background: var(--brand); }
+  .soon { font: 700 10px/1 var(--mono); letter-spacing: .08em; padding: 4px 6px; border-radius: 4px; background: var(--on-brand); color: var(--brand); }
 
   /* ---------- Top bar ---------- */
   .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px clamp(16px, 4vw, 48px); position: relative; z-index: 2; }
@@ -178,15 +181,15 @@
 
   /* ---------- Install + FAQ ---------- */
   .install { background: var(--bg-2); }
-  .steps { list-style: none; margin: 40px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
-  .steps li { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; counter-increment: s; }
-  .steps li::before { content: '0' counter(s); display: block; font: 700 13px var(--mono); color: var(--brand); margin-bottom: 14px; }
-  .steps h3 { font-size: 17px; margin: 0 0 6px; }
-  .steps p { margin: 0 0 14px; color: var(--ink-2); font-size: 14.5px; }
-  .steps p:last-child { margin-bottom: 0; }
-  .steps strong { color: var(--ink); }
-  .steps code { font: 13px var(--mono); background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 6px; color: var(--ink); }
-  .steps .btn { min-height: 46px; font-size: 12px; padding: 0 18px; }
+  .ways { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 36px; }
+  .way { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
+  .way h3 { font-size: 20px; margin: 0; }
+  .way p { margin: 0; color: var(--ink-2); font-size: 15px; }
+  .way strong { color: var(--ink); }
+  .way code { font: 13px var(--mono); background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 6px; color: var(--ink); }
+  .way pre { margin: 0; width: 100%; overflow-x: auto; background: var(--bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 12px 14px; }
+  .way pre code { border: 0; padding: 0; background: none; }
+  .way .btn { margin-top: auto; }
   .later { margin: 18px 0 0; font-size: 14px; color: var(--muted); }
   .faq { margin-top: 64px; max-width: 860px; }
   .faq h3 { font-size: 22px; margin: 0 0 8px; }
@@ -218,7 +221,8 @@
     .hero { grid-template-columns: minmax(0, 1fr); gap: 44px; padding-top: 8px; }
     .hero-mark { width: 520px; right: -200px; top: -60px; }
     .intro p.sub { max-width: 560px; }
-    .flows, .steps { grid-template-columns: 1fr; }
+    .flows { grid-template-columns: 1fr; }
+    .ways { grid-template-columns: minmax(0, 1fr); }
     .incl { grid-template-columns: 1fr 1fr; }
     .priv { grid-template-columns: 1fr; gap: 36px; }
     section.block { padding: 72px 0; }
@@ -275,13 +279,14 @@
     <h1 id="h-hero">Go beyond the <em>screenshot.</em></h1>
     <p class="sub">Inspect CSS, capture screens, record interactions and export design assets, all from one free, open-source Chrome extension.</p>
     <div class="ctas">
-      <a class="btn primary" href="#install">
+      <!-- TODO after the store listing is approved: make this a link to the Chrome Web Store page, drop aria-disabled and the "Soon" badge -->
+      <a class="btn primary store" aria-disabled="true">
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-        Get LupaX from GitHub
+        Add to Chrome <span class="soon">Soon</span>
       </a>
-      <a class="btn ghost" href="#how">See how it works</a>
+      <a class="btn ghost" href="https://github.com/danbaez/lupax">View on GitHub</a>
     </div>
-    <p class="status"><i></i>Chrome Web Store release coming soon</p>
+    <p class="status"><i></i>Coming soon to the Chrome Web Store</p>
     <ul class="facts"><li>Free forever</li><li>No account</li><li>No tracking</li></ul>
   </div>
 
@@ -387,15 +392,22 @@
 <section class="block install" id="install" aria-labelledby="h-install">
   <div class="wrap">
     <p class="eyebrow">Install LupaX</p>
-    <h2 class="title" id="h-install">Get it from GitHub in a minute.</h2>
-    <p class="lead">The Chrome Web Store release is coming soon. Until then, load LupaX into Chrome yourself:</p>
-    <ol class="steps">
-      <li><h3>Download LupaX</h3><p>Download the latest release and unzip it somewhere you'll keep it.</p>
-        <p><a class="btn primary" href="https://github.com/danbaez/lupax/releases/download/v1.0.0/lupax-1.0.0.zip">Download v1.0.0 (ZIP)</a></p></li>
-      <li><h3>Turn on Developer mode</h3><p>Open <code>chrome://extensions</code> and switch on <strong>Developer mode</strong>, top right.</p></li>
-      <li><h3>Load it</h3><p>Click <strong>Load unpacked</strong> and choose the unzipped <code>lupax-1.0.0</code> folder. Then pin LupaX to the toolbar.</p></li>
-    </ol>
-    <p class="later">Needs Chrome 116 or later. A copy you load yourself doesn't update automatically; the Chrome Web Store version will.</p>
+    <h2 class="title" id="h-install">Get LupaX.</h2>
+    <div class="ways">
+      <div class="way">
+        <h3>Chrome Web Store</h3>
+        <p>The easiest way to install LupaX, with automatic updates. The listing is coming soon.</p>
+        <!-- TODO after the store listing is approved: link this to the Chrome Web Store page and drop aria-disabled -->
+        <a class="btn primary store" aria-disabled="true">Add to Chrome <span class="soon">Soon</span></a>
+      </div>
+      <div class="way">
+        <h3>From source</h3>
+        <p>For developers: clone the repository, then in <code>chrome://extensions</code> turn on <strong>Developer mode</strong>, click <strong>Load unpacked</strong> and choose the <code>lupax</code> folder.</p>
+<pre><code>git clone https://github.com/danbaez/lupax.git</code></pre>
+        <a class="btn ghost" href="https://github.com/danbaez/lupax">View on GitHub</a>
+      </div>
+    </div>
+    <p class="later">Needs Chrome 116 or later.</p>
 
     <div class="faq">
       <h3>Questions</h3>
@@ -440,7 +452,7 @@
   <div class="wrap">
     <div class="big">
       <p>Go beyond the screenshot.</p>
-      <a class="btn primary" href="#install">Get LupaX from GitHub</a>
+      <a class="btn primary" href="#install">Get LupaX</a>
     </div>
     <div class="small">
       <p>Source on <a href="https://github.com/danbaez/lupax">GitHub</a> under the <a href="https://github.com/danbaez/lupax/blob/main/LICENSE">Apache-2.0 license</a> · <a href="privacy.html">Privacy policy</a> · <a href="mailto:support@lupax.app">support@lupax.app</a></p>
