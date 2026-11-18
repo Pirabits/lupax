@@ -4,11 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LupaX — CSS Inspector & Screen Capture</title>
-<meta name="description" content="Free, open-source Chrome extension to inspect and capture web pages: screenshots, recordings, CSS styles, design tokens, assets and accessibility checks. Nothing paywalled, and nothing you capture leaves your browser.">
-<meta property="og:title" content="LupaX — CSS Inspector & Screen Capture">
-<meta property="og:description" content="Inspect and capture any web page. Free and open source, with nothing paywalled.">
-<meta property="og:image" content="https://lupax.app/assets/icon128.png">
+<meta name="description" content="Inspect CSS, capture screens, record interactions and export design assets, all from one free, open-source Chrome extension. No account, no tracking.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="LupaX — Go beyond the screenshot">
+<meta property="og:description" content="Inspect CSS, capture screens, record interactions and export design assets from one free, open-source Chrome extension.">
+<meta property="og:image" content="https://lupax.app/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:url" content="https://lupax.app/">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/png" href="assets/icon32.png">
 <style>
   /* Plus Jakarta Sans, SIL Open Font License 1.1 (assets/OFL.txt). Served from this site: the page loads nothing from other servers. */
@@ -20,448 +24,631 @@
     --ink: #eef3fb; --ink-2: #b7c6de; --muted: #8597b8;
     --brand: #7ab8f5; --brand-600: #5ea6f0; --on-brand: #061230;
     --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+    --cream: #f6f3ec;
     --font: 'Jakarta', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition: none !important; animation: none !important; } }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
   a { color: var(--brand); }
   :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
-  .mono { font-family: var(--mono); }
-  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--brand); margin: 0 0 14px; }
-  .dashed { border: 0; border-top: 1px dashed var(--dash); margin: 0; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 16px; }
+  .eyebrow { font: 600 12px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--brand); margin: 0 0 14px; }
+  h2.title { font-size: clamp(30px, 4vw, 46px); line-height: 1.06; letter-spacing: -.025em; margin: 0 0 16px; font-weight: 800; }
+  .lead { color: var(--ink-2); max-width: 600px; margin: 0; }
+  section.block { padding: 96px 0; border-top: 1px dashed var(--dash); }
 
-  /* ---------- Hero: a poster ---------- */
-  .hero { position: relative; min-height: clamp(680px, 100svh, 960px); display: grid; grid-template-columns: auto 1fr minmax(240px, 300px); grid-template-rows: auto 1fr auto; gap: 0 40px; padding: 32px clamp(16px, 4vw, 48px); }
-  .hero-top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  /* buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 0 26px; font: 700 14px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; border: 1.5px solid transparent; cursor: pointer; }
+  .btn.primary { background: var(--brand); color: var(--on-brand); }
+  .btn.primary:hover { background: #8fc4f7; }
+  .btn.ghost { color: var(--ink); border-color: var(--line-2); background: transparent; }
+  .btn.ghost:hover { border-color: var(--brand); }
+
+  /* ---------- Top bar ---------- */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px clamp(16px, 4vw, 48px); position: relative; z-index: 2; }
   .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; }
   .brand-box { display: grid; place-items: center; width: 44px; height: 44px; border: 1.5px solid var(--ink); }
   .brand b { font-weight: 800; font-size: 20px; letter-spacing: -.01em; }
   .brand b span { color: var(--brand); }
-  .brand small { font: 500 11px/1.3 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); max-width: 150px; }
-  .to-gh { display: inline-flex; align-items: center; gap: 16px; color: var(--ink); text-decoration: none; font-size: 15px; }
-  .to-gh svg { transition: transform .2s; }
-  .to-gh:hover svg { transform: translateX(6px); }
+  .top nav { display: flex; align-items: center; gap: 28px; font-size: 15px; }
+  .top nav a { color: var(--ink-2); text-decoration: none; }
+  .top nav a:hover { color: var(--ink); }
+  .top nav .gh { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); min-height: 44px; }
+  .top nav .gh svg { transition: transform .2s; }
+  .top nav .gh:hover svg { transform: translateX(5px); }
 
-  .words { grid-row: 2 / 4; display: flex; gap: 10px; align-self: center; padding: 24px 0; }
-  .word { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; font-weight: 800; font-size: clamp(64px, 11.5vh, 132px); line-height: .82; letter-spacing: -.02em; text-transform: uppercase; }
+  /* ---------- Hero ---------- */
+  .hero { position: relative; overflow: clip; display: grid; grid-template-columns: auto minmax(300px, 440px) minmax(0, 1fr); gap: 0 clamp(28px, 3.5vw, 56px); align-items: center; padding: 24px clamp(16px, 4vw, 48px) 72px; }
+  .hero-mark { position: absolute; right: -120px; top: -150px; width: 760px; height: auto; opacity: .45; pointer-events: none; z-index: 0; }
+  .hero-mark .ring { stroke: var(--line-2); }
+  .hero-mark .cross { stroke: var(--brand); opacity: .55; }
+  .words { display: flex; gap: 8px; align-self: stretch; align-items: flex-end; position: relative; z-index: 1; }
+  .word { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; font-weight: 800; font-size: clamp(64px, 10.5vh, 118px); line-height: .82; letter-spacing: -.02em; text-transform: uppercase; }
   .word.accent { color: var(--brand); }
+  .intro { position: relative; z-index: 1; }
+  .intro h1 { font-size: clamp(42px, 4.3vw, 62px); line-height: 1; letter-spacing: -.035em; margin: 0 0 22px; font-weight: 800; }
+  .intro h1 em { font-style: normal; color: var(--brand); }
+  .intro p.sub { font-size: 18px; color: var(--ink-2); margin: 0 0 30px; max-width: 420px; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+  .status { display: inline-flex; align-items: center; gap: 10px; margin: 22px 0 0; font: 13px/1.4 var(--mono); color: var(--ink-2); }
+  .status i { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(251, 191, 36, .15); flex: none; }
+  .facts { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 18px; font: 13px/1.4 var(--mono); color: var(--muted); }
+  .facts li::before { content: '✓ '; color: var(--green); }
 
-  .stage { grid-row: 2 / 4; position: relative; display: grid; place-items: center; min-height: 0; }
-  .mark { width: min(100%, 64vh, 600px); height: auto; overflow: visible; }
-  .mark .ring { stroke: var(--ink); }
-  .mark .cross { stroke: var(--brand); }
-  .cta-zone { position: absolute; left: 0; bottom: 8%; display: grid; gap: 14px; }
-  .cta { display: inline-flex; align-items: center; gap: 16px; background: var(--brand); color: var(--on-brand); padding: 26px 36px; font: 700 15px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; text-decoration: none; border: 0; }
-  .cta[aria-disabled="true"] { cursor: default; }
-  .cta-sub { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--ink-2); padding-left: 28px; }
-  .cta-sub i { width: 8px; height: 8px; background: var(--brand); transform: rotate(45deg); flex: none; }
-  .cta-sub a { color: var(--ink); font-weight: 700; }
+  /* ---------- Demo ---------- */
+  .demo { position: relative; z-index: 1; min-width: 0; }
+  .modes { display: flex; gap: 6px; margin-bottom: 14px; }
+  .modes button { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; background: var(--bg); color: var(--ink-2); border: 1.5px solid var(--line-2); font: 600 14px var(--font); cursor: pointer; }
+  .modes button b { font: 600 12px var(--mono); color: var(--muted); }
+  .modes button[aria-selected="true"] { background: var(--card-2); color: var(--ink); border-color: var(--brand); }
+  .modes button[aria-selected="true"] b { color: var(--brand); }
+  .window { border: 1px solid var(--line-2); border-radius: 14px; background: var(--card); overflow: hidden; box-shadow: 0 40px 90px rgba(0, 0, 0, .45); }
+  .chrome { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .chrome i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
+  .chrome .url { margin-left: 10px; flex: 1; max-width: 300px; background: var(--bg); border-radius: 6px; padding: 4px 10px; font: 11px var(--mono); color: var(--muted); }
+  .chrome .ext { margin-left: auto; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #10264f; }
+  .viewport { position: relative; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  .viewport.capture { cursor: crosshair; touch-action: none; }
+  .hint { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; font: 13px/1.4 var(--mono); color: var(--muted); min-height: 20px; }
+  .hint::before { content: ''; width: 6px; height: 6px; background: var(--brand); transform: rotate(45deg); flex: none; }
 
-  .side { grid-row: 2; align-self: end; padding-bottom: 8px; }
-  .side h1 { font-size: 15px; line-height: 1.6; font-weight: 400; color: var(--ink-2); margin: 0 0 6px; min-height: 5.2em; }
-  .side h1 b { color: var(--ink); font-weight: 700; }
-  .steps { display: flex; gap: 22px; margin-top: 26px; }
-  .steps button { background: none; border: 0; padding: 4px 0; color: var(--muted); font: 600 15px/1 var(--mono); cursor: pointer; border-bottom: 2px solid transparent; }
-  .steps button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brand); }
-  .meta { grid-column: 3; grid-row: 3; align-self: end; display: flex; gap: 12px; align-items: flex-start; font-size: 13px; color: var(--muted); padding-top: 32px; }
-  .meta b { color: var(--ink); font-weight: 700; }
-  .meta a { color: var(--muted); }
+  /* the sample page being inspected */
+  .site { background: var(--cream); color: #17181c; font-family: var(--font); padding: 0 0 26px; }
+  .s-nav { display: flex; align-items: center; gap: 22px; padding: 16px 26px; border-bottom: 1px solid #e6e0d3; font-size: 13px; color: #4a4d55; }
+  .s-logo { font-weight: 800; color: #17181c; font-size: 15px; margin-right: auto; letter-spacing: -.01em; }
+  .s-menu { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #d9d2c3; border-radius: 8px; background: #fff; color: #17181c; padding: 0; }
+  .s-hero { padding: 30px 26px 22px; }
+  .s-kicker { display: inline-block; font: 700 10px var(--mono); letter-spacing: .14em; color: #2457c5; margin-bottom: 10px; }
+  .s-title { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: clamp(28px, 3.1vw, 40px); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 12px; max-width: 420px; }
+  .s-copy { font-size: 14px; line-height: 1.55; color: #555a64; margin: 0 0 18px; max-width: 380px; }
+  .s-ctas { display: flex; align-items: center; gap: 18px; }
+  .s-btn { background: #17181c; color: #fff; font-size: 13px; font-weight: 700; padding: 10px 18px; border-radius: 9px; }
+  .s-link { color: #2457c5; font-size: 13px; font-weight: 700; }
+  .s-cards { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; padding: 0 26px; }
+  .s-card { background: #fff; border: 1px solid #e6e0d3; border-radius: 12px; padding: 14px; }
+  .s-card img { display: block; width: 100%; height: 74px; }
+  .s-card h3 { font-size: 13px; margin: 10px 0 2px; }
+  .s-stat { font-size: 26px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+  .s-note { font-size: 11px; color: #b0a999; margin: 4px 0 0; }
 
-  /* ---------- Facts strip ---------- */
-  .facts { border-block: 1px dashed var(--dash); background: var(--bg-2); }
-  .facts ul { list-style: none; margin: 0 auto; padding: 18px 16px; max-width: 1120px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 36px; font: 13px/1.4 var(--mono); color: var(--ink-2); }
-  .facts b { color: var(--ink); }
-
-  /* ---------- Showcase rows ---------- */
-  .row { display: grid; grid-template-columns: 1fr 1.15fr; gap: 56px; align-items: center; padding: 88px 0; }
-  .row + .dashed { }
-  .row.flip .copy { order: 2; }
-  .copy h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.08; letter-spacing: -.025em; margin: 0 0 18px; font-weight: 800; }
-  .copy p { font: 15px/1.75 var(--mono); color: var(--ink-2); margin: 0 0 14px; }
-  .copy p b { color: var(--ink); }
-  .copy kbd { font: 600 12px var(--mono); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--ink); }
-
-  /* mock: a page with the inspector on it */
-  .mock { position: relative; border: 1px solid var(--line-2); border-radius: 14px; background: var(--card); overflow: hidden; box-shadow: 0 30px 80px rgba(0, 0, 0, .35); }
-  .mock-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-  .mock-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-2); }
-  .mock-bar span { margin-left: 10px; flex: 1; max-width: 260px; background: var(--bg); border-radius: 6px; padding: 3px 10px; font: 11px var(--mono); color: var(--muted); }
-  .paper { background: #f6f3ec; color: #14161c; padding: 44px 34px 28px; position: relative; }
-  .paper small { font: 600 10px var(--mono); letter-spacing: .14em; color: #2b62c9; }
-  .paper .t { position: relative; display: inline-block; font-size: 40px; font-weight: 800; letter-spacing: -.03em; line-height: 1.02; margin: 10px 0 12px; outline: 1.5px dashed #2b78d0; outline-offset: 6px; background: rgba(43, 120, 208, .08); }
-  .paper .t .tag { position: absolute; left: -7px; top: -30px; background: #2b78d0; color: #fff; font: 600 10px var(--mono); padding: 3px 7px; border-radius: 4px; white-space: nowrap; }
-  .paper p { margin: 0; color: #555b66; font-size: 13px; max-width: 300px; }
-  .tip { position: relative; margin: 18px 0 0 auto; width: 268px; background: #0b1631; color: var(--ink); border: 1px solid var(--line-2); border-radius: 12px; padding: 14px; font: 12px/1.5 var(--mono); box-shadow: 0 18px 40px rgba(0, 0, 0, .45); }
-  .tip dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 0; }
+  /* overlay: inspector, capture selection, audit pins */
+  .ov { position: absolute; inset: 0; pointer-events: none; }
+  .box { position: absolute; border: 1.5px solid #2b78d0; background: rgba(43, 120, 208, .1); transition: all .12s ease-out; }
+  .box .tag { position: absolute; left: -1.5px; bottom: 100%; margin-bottom: 4px; background: #2b78d0; color: #fff; font: 600 10px/1 var(--mono); padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
+  .box.below .tag { bottom: auto; top: 100%; margin: 4px 0 0; }
+  .tip { position: absolute; width: 250px; background: #0b1631; color: var(--ink); border: 1px solid var(--line-2); border-radius: 12px; padding: 12px; font: 11.5px/1.5 var(--mono); box-shadow: 0 18px 40px rgba(0, 0, 0, .45); pointer-events: auto; }
+  .tip dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
   .tip dt { color: var(--muted); }
-  .tip dd { margin: 0; text-align: right; }
-  .tip hr { border: 0; border-top: 1px solid var(--line-2); margin: 9px 0; }
-  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: #14161c; border: 1px solid #fff4; vertical-align: -1px; margin-right: 6px; }
-  .ok { color: var(--green); }
-  .tip button { width: 100%; margin-top: 10px; background: var(--brand); color: var(--on-brand); border: 0; border-radius: 8px; padding: 8px; font: 700 12px var(--font); }
+  .tip dd { margin: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tip hr { border: 0; border-top: 1px solid var(--line-2); margin: 8px 0; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 1px solid #fff5; vertical-align: -1px; margin-right: 6px; }
+  .pass { color: var(--green); } .fail { color: var(--red); }
+  .tip button { width: 100%; min-height: 34px; margin-top: 10px; background: var(--brand); color: var(--on-brand); border: 0; border-radius: 8px; font: 700 12px var(--font); cursor: pointer; }
+  .sel { position: absolute; border: 1.5px dashed #fff; box-shadow: 0 0 0 9999px rgba(6, 18, 48, .55); }
+  .sel .dim { position: absolute; left: 0; bottom: 100%; margin-bottom: 6px; background: #0b1631; color: var(--ink); font: 600 10px/1 var(--mono); padding: 5px 7px; border-radius: 5px; white-space: nowrap; }
+  .sel svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .bar { position: absolute; display: flex; gap: 4px; padding: 5px; background: #0b1631; border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); pointer-events: auto; }
+  .bar button { min-height: 32px; padding: 0 10px; background: transparent; color: var(--ink); border: 0; border-radius: 7px; font: 600 12px var(--font); cursor: pointer; white-space: nowrap; }
+  .bar button:hover { background: var(--card-2); }
+  .bar button.go { background: var(--brand); color: var(--on-brand); }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; transition: opacity .35s; pointer-events: none; }
+  .flash.on { opacity: .7; transition: none; }
+  .pin { position: absolute; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--red); color: #fff; font: 700 11px var(--mono); box-shadow: 0 0 0 3px rgba(248, 113, 113, .3); transform: translate(-50%, -50%); }
+  .pin.warn { background: var(--amber); color: #2c2616; box-shadow: 0 0 0 3px rgba(251, 191, 36, .3); }
+  .hl { position: absolute; border: 2px solid var(--red); border-radius: 4px; box-shadow: 0 0 0 4px rgba(248, 113, 113, .2); }
+  .report { position: absolute; right: 12px; top: 12px; width: 236px; background: #0b1631; border: 1px solid var(--line-2); border-radius: 12px; padding: 12px; font-size: 12px; pointer-events: auto; box-shadow: 0 18px 40px rgba(0, 0, 0, .45); }
+  .report .score { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .report .score b { display: block; font-size: 14px; }
+  .report .score small { color: var(--muted); font-size: 11px; }
+  .report ol { list-style: none; margin: 0; padding: 0; }
+  .report li button { display: flex; width: 100%; gap: 8px; align-items: flex-start; text-align: left; background: none; border: 0; border-top: 1px dashed var(--line-2); padding: 7px 2px; color: var(--ink-2); font: 11.5px/1.4 var(--font); cursor: pointer; }
+  .report li button:hover { color: var(--ink); }
+  .report li .n { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--red); color: #fff; font: 700 10px var(--mono); }
+  .report li .n.warn { background: var(--amber); color: #2c2616; }
+  .toast { position: absolute; left: 50%; bottom: 14px; transform: translate(-50%, 20px); opacity: 0; background: #0b1631; color: var(--ink); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 14px; font-size: 12.5px; white-space: nowrap; transition: all .25s; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
 
-  /* mock: the popup capture menu */
-  .menu-wrap { display: grid; place-items: center; padding: 34px 20px; background: radial-gradient(120% 80% at 70% 0%, #12306488, transparent 60%), var(--card); }
-  .menu { width: min(100%, 360px); background: #0b1631; border: 1px solid var(--line-2); border-radius: 16px; padding: 14px; box-shadow: 0 22px 50px rgba(0, 0, 0, .5); }
-  .menu-h { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 12px; font-weight: 800; }
-  .menu-h span { font: 11px var(--mono); color: var(--muted); font-weight: 400; }
-  .item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 10px; }
-  .item.on { background: var(--card-2); }
-  .item .ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #10264f; color: var(--brand); flex: none; }
-  .item b { display: block; font-size: 14px; font-weight: 700; }
-  .item small { display: block; color: var(--muted); font-size: 12px; }
-  .item kbd { margin-left: auto; font: 11px var(--mono); color: var(--ink-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 2px 6px; white-space: nowrap; }
-  .menu-sep { font: 600 10px var(--mono); letter-spacing: .14em; color: var(--muted); padding: 12px 10px 4px; text-transform: uppercase; }
-  .rec { display: flex; gap: 6px; padding: 6px 10px 2px; }
-  .rec span { flex: 1; text-align: center; font: 12px var(--mono); padding: 6px 0; border: 1px solid var(--line-2); border-radius: 8px; color: var(--ink-2); }
-  .rec span.sel { background: #163463; border-color: var(--brand); color: var(--ink); }
+  /* ---------- Workflows ---------- */
+  .flows { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
+  .flow { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px; }
+  .flow .num { font: 700 13px var(--mono); color: var(--brand); margin-bottom: 18px; }
+  .flow h3 { font-size: 22px; letter-spacing: -.015em; line-height: 1.15; margin: 0 0 10px; }
+  .flow p { margin: 0 0 16px; color: var(--ink-2); font-size: 15px; }
+  .flow ul { margin: 0 0 22px; padding: 0; list-style: none; font: 13px/1.9 var(--mono); color: var(--ink-2); }
+  .flow li::before { content: '— '; color: var(--muted); }
+  .flow .try { margin-top: auto; align-self: flex-start; min-height: 44px; padding: 0 16px; background: transparent; color: var(--brand); border: 1.5px solid var(--line-2); font: 600 13px var(--mono); cursor: pointer; }
+  .flow .try:hover { border-color: var(--brand); }
 
-  /* mock: accessibility + tokens */
-  .audit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 20px; }
-  .panel { background: #0b1631; border: 1px solid var(--line-2); border-radius: 12px; padding: 16px; }
-  .score { display: flex; align-items: center; gap: 14px; }
-  .score svg { flex: none; }
-  .score b { display: block; font-size: 15px; }
-  .score small { color: var(--muted); font-size: 12px; }
-  .checks { list-style: none; margin: 14px 0 0; padding: 0; font: 12px/1.9 var(--mono); }
-  .checks li { display: flex; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--line-2); }
-  .tokens { grid-column: 1 / -1; font: 12px/1.75 var(--mono); color: var(--ink-2); white-space: pre; overflow-x: auto; margin: 0; }
-  .tokens .k { color: var(--brand); }
-  .tokens .c { color: var(--muted); }
-  .seg { display: flex; gap: 6px; margin-bottom: 10px; }
-  .seg span { font: 11px var(--mono); padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line-2); color: var(--muted); }
-  .seg span.sel { color: var(--ink); border-color: var(--brand); background: #163463; }
-
-  /* ---------- Feature columns ---------- */
-  .features { padding: 88px 0; }
-  .features h2, .privacy h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.08; letter-spacing: -.025em; margin: 0 0 40px; font-weight: 800; max-width: 640px; }
-  .cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px 32px; }
-  .col svg { color: var(--brand); margin-bottom: 14px; }
-  .col h3 { font-size: 17px; margin: 0 0 6px; }
-  .col p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+  /* ---------- Everything included ---------- */
+  .incl { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 40px; border-top: 1px solid var(--line); }
+  .incl div { padding: 20px 20px 20px 0; border-bottom: 1px solid var(--line); }
+  .incl b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .incl span { font-size: 14px; color: var(--muted); }
 
   /* ---------- Privacy ---------- */
-  .privacy { background: var(--bg-2); border-top: 1px dashed var(--dash); padding: 88px 0; }
-  .priv-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: start; }
-  .priv-grid h2 { margin-bottom: 18px; }
-  .priv-grid > div > p { color: var(--ink-2); margin: 0 0 14px; max-width: 520px; }
-  .nones { background: var(--card); border: 1px solid var(--line-2); border-radius: 16px; padding: 8px 22px; }
-  .nones div { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--ink-2); }
+  .priv { display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: start; }
+  .priv p { color: var(--ink-2); margin: 0 0 14px; max-width: 520px; }
+  .nones { background: var(--card); border: 1px solid var(--line-2); border-radius: 16px; padding: 6px 22px; }
+  .nones div { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--ink-2); }
   .nones div:last-child { border-bottom: 0; }
   .nones b { font: 600 14px var(--mono); color: var(--ink); }
-  details { background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; margin-top: 14px; }
-  .acc { margin-top: 40px; }
-  summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; font-weight: 700; }
+
+  /* ---------- Install + FAQ ---------- */
+  .install { background: var(--bg-2); }
+  .steps { list-style: none; margin: 40px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
+  .steps li { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; counter-increment: s; }
+  .steps li::before { content: '0' counter(s); display: block; font: 700 13px var(--mono); color: var(--brand); margin-bottom: 14px; }
+  .steps h3 { font-size: 17px; margin: 0 0 6px; }
+  .steps p { margin: 0 0 14px; color: var(--ink-2); font-size: 14.5px; }
+  .steps p:last-child { margin-bottom: 0; }
+  .steps strong { color: var(--ink); }
+  .steps code { font: 13px var(--mono); background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 6px; color: var(--ink); }
+  .steps .btn { min-height: 46px; font-size: 12px; padding: 0 18px; }
+  .later { margin: 18px 0 0; font-size: 14px; color: var(--muted); }
+  .faq { margin-top: 64px; max-width: 860px; }
+  .faq h3 { font-size: 22px; margin: 0 0 8px; }
+  details { border-bottom: 1px solid var(--line-2); }
+  summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 60px; padding: 14px 0; font-weight: 700; }
   summary::-webkit-details-marker { display: none; }
-  summary::after { content: '+'; font: 400 24px/1 var(--font); color: var(--brand); transition: transform .2s; }
+  summary::after { content: '+'; font: 400 26px/1 var(--font); color: var(--brand); transition: transform .2s; flex: none; }
   details[open] summary::after { transform: rotate(45deg); }
-  .perm { margin: 0; padding: 0 22px 18px; display: grid; grid-template-columns: max-content 1fr; gap: 10px 24px; font-size: 14.5px; }
+  details > div { padding: 0 0 20px; color: var(--ink-2); font-size: 15px; }
+  details > div p { margin: 0 0 10px; }
+  .perm { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 24px; font-size: 14.5px; }
   .perm dt { font: 600 13px/1.6 var(--mono); color: var(--brand); }
-  .perm dd { margin: 0; color: var(--ink-2); }
-  .fine { font-size: 14px; color: var(--muted); margin-top: 20px; }
+  .perm dd { margin: 0; }
 
   /* ---------- Footer ---------- */
-  footer { padding: 40px 0 56px; font: 13px/1.9 var(--mono); color: var(--muted); }
+  footer { padding: 56px 0; font: 13px/1.9 var(--mono); color: var(--muted); border-top: 1px dashed var(--dash); }
   footer a { color: var(--ink-2); }
-  footer .big { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding: 0 0 32px; }
-  footer .big p { margin: 0; font: 800 clamp(26px, 3.4vw, 36px)/1.1 var(--font); color: var(--ink); letter-spacing: -.02em; }
-  footer .big .cta { padding: 20px 28px; font-size: 13px; }
-  footer .small { padding-top: 22px; }
+  footer .big { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 36px; margin-bottom: 22px; border-bottom: 1px dashed var(--dash); }
+  footer .big p { margin: 0; font: 800 clamp(26px, 3.4vw, 38px)/1.1 var(--font); color: var(--ink); letter-spacing: -.02em; }
   footer .small p { margin: 0; }
 
   /* ---------- Responsive ---------- */
-  @media (max-width: 1000px) {
-    .hero { grid-template-columns: 1fr; grid-template-rows: none; min-height: 0; gap: 28px; }
-    .words { grid-row: auto; flex-direction: column; gap: 0; padding: 24px 0 0; }
-    .word { writing-mode: horizontal-tb; transform: none; font-size: clamp(56px, 15vw, 120px); line-height: .9; }
-    .stage { grid-row: auto; display: grid; gap: 28px; }
-    .mark { width: min(78vw, 420px); justify-self: center; }
-    .cta-zone { position: static; }
-    .cta { justify-content: center; }
-    .side, .meta { grid-column: auto; grid-row: auto; }
-    .meta { padding-top: 0; }
-    .row, .priv-grid { grid-template-columns: 1fr; gap: 36px; padding: 64px 0; }
-    .priv-grid { padding: 0; }
-    .row.flip .copy { order: 0; }
-    .cols { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 1180px) {
+    .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+    .words { display: none; }
+  }
+  @media (max-width: 900px) {
+    .top nav a:not(.gh) { display: none; }
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 44px; padding-top: 8px; }
+    .hero-mark { width: 520px; right: -200px; top: -60px; }
+    .intro p.sub { max-width: 560px; }
+    .flows, .steps { grid-template-columns: 1fr; }
+    .incl { grid-template-columns: 1fr 1fr; }
+    .priv { grid-template-columns: 1fr; gap: 36px; }
+    section.block { padding: 72px 0; }
   }
   @media (max-width: 560px) {
-    .brand small, .to-gh span { display: none; }
-    .cols { grid-template-columns: 1fr; }
-    .audit { grid-template-columns: minmax(0, 1fr); padding: 14px; }
-    .paper { padding: 40px 20px 20px; }
-    .paper .t { font-size: 34px; }
-    .tip { width: auto; }
-    .perm { grid-template-columns: 1fr; gap: 2px; }
+    .ctas .btn { flex: 1 1 100%; }
+    .modes { gap: 4px; }
+    .modes button { flex: 1; justify-content: center; padding: 0 8px; }
+    .modes button b { display: none; }
+    .s-nav span:not(.s-logo) { display: none; }
+    .s-cards { grid-template-columns: 1fr; }
+    .s-card.chart { display: none; }
+    .tip { width: 220px; }
+    .report { left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
+    .incl { grid-template-columns: 1fr; }
+    .perm { grid-template-columns: 1fr; gap: 0; }
     .perm dd { margin-bottom: 10px; }
-    .cta { padding: 22px 20px; }
   }
 </style>
 </head>
 <body>
 
-<header class="hero">
-  <div class="hero-top">
-    <a class="brand" href="/" aria-label="LupaX home">
-      <span class="brand-box"><svg width="28" height="28" viewBox="0 0 512 512" aria-hidden="true"><g fill="none" stroke="#7ab8f5" stroke-width="30"><circle cx="218" cy="219" r="120"/><path d="M308 308 L425 422 Q434 431 425 440 L417 449 Q409 457 400 449 L290 333" stroke-linecap="round" stroke-linejoin="round"/><path d="M167 165 L206 204 M232 228 L273 269 M273 165 L166 272" stroke-width="32" stroke-linecap="square"/></g></svg></span>
-      <b>Lupa<span>X</span></b>
-      <small>CSS inspector &amp; screen capture</small>
-    </a>
-    <a class="to-gh" href="https://github.com/danbaez/lupax"><span>github.com/danbaez/lupax</span>
-      <svg width="40" height="14" viewBox="0 0 40 14" aria-hidden="true"><path d="M0 7h38M32 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>
-  </div>
+<header class="top">
+  <a class="brand" href="/" aria-label="LupaX home">
+    <span class="brand-box"><svg width="28" height="28" viewBox="0 0 512 512" aria-hidden="true"><g fill="none" stroke="#7ab8f5" stroke-width="30"><circle cx="218" cy="219" r="120"/><path d="M308 308 L425 422 Q434 431 425 440 L417 449 Q409 457 400 449 L290 333" stroke-linecap="round" stroke-linejoin="round"/><path d="M167 165 L206 204 M232 228 L273 269 M273 165 L166 272" stroke-width="32" stroke-linecap="square"/></g></svg></span>
+    <b>Lupa<span>X</span></b>
+  </a>
+  <nav aria-label="Main">
+    <a href="#how">How it works</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#install">Install</a>
+    <a class="gh" href="https://github.com/danbaez/lupax">GitHub<svg width="34" height="14" viewBox="0 0 34 14" aria-hidden="true"><path d="M0 7h32M26 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>
+  </nav>
+</header>
+
+<main>
+<section class="hero" aria-labelledby="h-hero">
+  <svg class="hero-mark" viewBox="40 40 440 440" aria-hidden="true">
+    <g fill="none" stroke-width="1.5">
+      <circle class="ring" cx="218" cy="219" r="120" vector-effect="non-scaling-stroke"/>
+      <circle class="ring" cx="218" cy="219" r="104" vector-effect="non-scaling-stroke"/>
+      <rect class="ring" x="346" y="201" width="190" height="36" rx="18" transform="rotate(45 218 219)" vector-effect="non-scaling-stroke"/>
+      <path class="cross" d="M167 165 L206 204 M232 228 L273 269 M273 165 L166 272" vector-effect="non-scaling-stroke"/>
+    </g>
+  </svg>
 
   <div class="words" aria-hidden="true">
     <p class="word">Capture</p>
     <p class="word accent">Inspect</p>
   </div>
 
-  <div class="stage">
-    <!-- the LupaX mark, drawn as a giant outline -->
-    <svg class="mark" viewBox="40 40 440 440" aria-hidden="true">
-      <g fill="none" stroke-width="2.5" vector-effect="non-scaling-stroke">
-        <circle class="ring" cx="218" cy="219" r="120" vector-effect="non-scaling-stroke"/>
-        <circle class="ring" cx="218" cy="219" r="104" vector-effect="non-scaling-stroke"/>
-        <rect class="ring" x="346" y="201" width="190" height="36" rx="18" transform="rotate(45 218 219)" vector-effect="non-scaling-stroke"/>
-        <path class="cross" d="M167 165 L206 204 M232 228 L273 269 M273 165 L166 272" vector-effect="non-scaling-stroke"/>
-      </g>
-    </svg>
-    <div class="cta-zone">
-      <!-- TODO after the store listing is approved: make this a link to the Chrome Web Store page and drop aria-disabled -->
-      <a class="cta" aria-disabled="true">
-        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-        Coming soon to Chrome
+  <div class="intro">
+    <p class="eyebrow">LupaX / Capture + Inspect</p>
+    <h1 id="h-hero">Go beyond the <em>screenshot.</em></h1>
+    <p class="sub">Inspect CSS, capture screens, record interactions and export design assets, all from one free, open-source Chrome extension.</p>
+    <div class="ctas">
+      <a class="btn primary" href="#install">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        Get LupaX from GitHub
       </a>
-      <div class="cta-sub"><i></i><span>Want it today? <a href="https://github.com/danbaez/lupax#load-it">Load it from GitHub</a></span></div>
+      <a class="btn ghost" href="#how">See how it works</a>
     </div>
+    <p class="status"><i></i>Chrome Web Store release coming soon</p>
+    <ul class="facts"><li>Free forever</li><li>No account</li><li>No tracking</li></ul>
   </div>
 
-  <div class="side">
-    <h1 id="pitch" aria-live="polite"><b>Nothing paywalled.</b> Screenshots, recordings, CSS styles, design tokens, assets and accessibility checks for any web page. Free and open source.</h1>
-    <div class="steps" role="tablist" aria-label="What LupaX does">
-      <button role="tab" aria-selected="true" data-i="0">01</button>
-      <button role="tab" aria-selected="false" data-i="1">02</button>
-      <button role="tab" aria-selected="false" data-i="2">03</button>
-      <button role="tab" aria-selected="false" data-i="3">04</button>
+  <div class="demo" id="demo">
+    <div class="modes" role="tablist" aria-label="Try LupaX on a sample page">
+      <button role="tab" id="t-inspect" aria-selected="true" aria-controls="viewport" data-mode="inspect"><b>01</b>Inspect</button>
+      <button role="tab" id="t-capture" aria-selected="false" aria-controls="viewport" data-mode="capture" tabindex="-1"><b>02</b>Capture</button>
+      <button role="tab" id="t-audit" aria-selected="false" aria-controls="viewport" data-mode="audit" tabindex="-1"><b>03</b>Audit</button>
     </div>
+    <div class="window">
+      <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span class="url">northwind.example/launch</span>
+        <span class="ext"><svg width="16" height="16" viewBox="0 0 512 512"><g fill="none" stroke="#7ab8f5" stroke-width="40"><circle cx="218" cy="219" r="120"/><path d="M308 308 L425 422" stroke-linecap="round"/></g></svg></span></div>
+      <div class="viewport" id="viewport" role="tabpanel" aria-labelledby="t-inspect">
+        <!-- A made-up page for the demo. It is real HTML: the inspector and the audit read its actual styles. -->
+        <div class="site" id="site" aria-hidden="true">
+          <div class="s-nav"><span class="s-logo">Northwind</span><span>Product</span><span>Pricing</span><span>Docs</span>
+            <button class="s-menu" tabindex="-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+          <div class="s-hero">
+            <span class="s-kicker">NEW · VERSION 2.0</span>
+            <h2 class="s-title">Ship pages your users love.</h2>
+            <p class="s-copy">Analytics, A/B tests and heatmaps in one lightweight script. Set up in five minutes.</p>
+            <div class="s-ctas"><span class="s-btn">Start free</span><span class="s-link">See pricing →</span></div>
+          </div>
+          <div class="s-cards">
+            <div class="s-card chart"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 74' preserveAspectRatio='none'%3E%3Cpath d='M0 60 C30 55 40 30 70 36 S110 20 130 24 S170 6 200 10 L200 74 L0 74Z' fill='%23dbe6fb'/%3E%3Cpath d='M0 60 C30 55 40 30 70 36 S110 20 130 24 S170 6 200 10' fill='none' stroke='%232457c5' stroke-width='2.5'/%3E%3C/svg%3E"><h3>Weekly visitors</h3></div>
+            <div class="s-card"><div class="s-stat">+38%</div><h3>Conversion</h3><p class="s-note">Compared with the last 30 days</p></div>
+          </div>
+        </div>
+        <div class="ov" id="ov"></div>
+      </div>
+    </div>
+    <p class="hint" id="hint" aria-live="polite">Hover or tap any element on the page to inspect it.</p>
   </div>
+</section>
 
-  <div class="meta">
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.5M8.97 13.75 4.7 6.4M15.03 13.75l-4.27 7.2"/></svg>
-    <div><b>Chrome 116+</b> &nbsp;·&nbsp; v1.0.0<br>Bugs and support: <a href="mailto:support@lupax.app">support@lupax.app</a></div>
-  </div>
-</header>
-
-<div class="facts">
-  <ul>
-    <li><b>Free</b> &amp; open source</li>
-    <li><b>Apache-2.0</b> licensed</li>
-    <li><b>No</b> account</li>
-    <li><b>No</b> tracking</li>
-    <li>Works <b>offline</b></li>
-    <li><b>Nothing</b> paywalled</li>
-  </ul>
-</div>
-
-<main>
+<section class="block" id="how" aria-labelledby="h-how">
   <div class="wrap">
-    <section class="row" aria-labelledby="h-inspect">
-      <div class="copy">
-        <p class="eyebrow">01 · Inspect</p>
-        <h2 id="h-inspect">Hover anything. Read its CSS.</h2>
-        <p>Turn on <b>Inspect Mode</b> and point at any element to see its <b>font, size, colors, box model and contrast</b>. Pin it, walk up and down the tree with <kbd>↑</kbd> <kbd>↓</kbd>, then <b>Copy CSS</b>.</p>
-        <p>The popup also reads the whole page: its color palette, type scale, spacing, radii, shadows and components.</p>
-      </div>
-      <div class="mock" aria-hidden="true">
-        <div class="mock-bar"><i></i><i></i><i></i><span>example.com/pricing</span></div>
-        <div class="paper">
-          <small>PRICING · SIMPLE</small><br>
-          <span class="t"><span class="tag">h1.hero-title · 350 × 82</span>Simple plans<br>for every team.</span>
-          <p>Start free, upgrade when you are ready. No credit card required.</p>
-          <div class="tip">
-            <dl>
-              <dt>font</dt><dd>Inter, 800</dd>
-              <dt>size</dt><dd>40px / 1.02</dd>
-              <dt>letter-spacing</dt><dd>-1.2px</dd>
-              <dt>color</dt><dd><span class="sw"></span>#14161C</dd>
-            </dl>
-            <hr>
-            <dl>
-              <dt>contrast</dt><dd><span class="ok">16.4 · AAA</span></dd>
-              <dt>margin</dt><dd>10px 0 12px</dd>
-              <dt>padding</dt><dd>0</dd>
-            </dl>
-            <button tabindex="-1">Copy CSS</button>
-          </div>
-        </div>
-      </div>
-    </section>
-    <hr class="dashed">
-
-    <section class="row flip" aria-labelledby="h-capture">
-      <div class="copy">
-        <p class="eyebrow">02 · Capture &amp; record</p>
-        <h2 id="h-capture">Any part of the page. Or the whole screen.</h2>
-        <p>Capture the <b>visible area</b>, a <b>region</b>, the <b>full scrolling page</b> or a single <b>element</b>, then mark it up with arrows, text, shapes and blur. Save as <b>PNG, JPG or PDF</b> or copy it to the clipboard.</p>
-        <p>Record a <b>tab, a window or your desktop</b> with microphone, system audio and a webcam bubble, up to 4K at 60 fps.</p>
-      </div>
-      <div class="mock menu-wrap" aria-hidden="true">
-        <div class="menu">
-          <div class="menu-h">Capture <span>delay: off · 3 · 5 · 10s</span></div>
-          <div class="item on"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg></span><span><b>Visible area</b><small>What you see right now</small></span><kbd>Alt ⇧ V</kbd></div>
-          <div class="item"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"><rect x="4" y="4" width="16" height="16" rx="1"/></svg></span><span><b>Selected region</b><small>Drag to select</small></span><kbd>Alt ⇧ S</kbd></div>
-          <div class="item"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><span><b>Full page</b><small>The entire scrolling page</small></span><kbd>Alt ⇧ F</kbd></div>
-          <div class="menu-sep">Record</div>
-          <div class="rec"><span class="sel">Tab</span><span>Window</span><span>Desktop</span></div>
-          <div class="rec"><span class="sel">Mic</span><span class="sel">Webcam</span><span>4K · 60</span></div>
-        </div>
-      </div>
-    </section>
-    <hr class="dashed">
-
-    <section class="row" aria-labelledby="h-audit">
-      <div class="copy">
-        <p class="eyebrow">03 · Audit &amp; export</p>
-        <h2 id="h-audit">Accessibility checks and design tokens.</h2>
-        <p>Get an <b>accessibility score</b> with contrast, alt text, labels, link names, headings and more, and jump to each issue with <b>Show on page</b>.</p>
-        <p>Export the page's colors, fonts and spacing as <b>W3C design tokens, CSS variables or a Tailwind theme</b>, and download its <b>images, SVGs and fonts</b> as a ZIP.</p>
-      </div>
-      <div class="mock" aria-hidden="true">
-        <div class="audit">
-          <div class="panel">
-            <div class="score">
-              <svg width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" fill="none" stroke="#13284f" stroke-width="7"/><circle cx="32" cy="32" r="27" fill="none" stroke="#7ab8f5" stroke-width="7" stroke-linecap="round" stroke-dasharray="156 170" transform="rotate(-90 32 32)"/><text x="32" y="38" text-anchor="middle" fill="#eef3fb" font-size="17" font-weight="800" font-family="Jakarta, sans-serif">92</text></svg>
-              <div><b>Accessibility</b><small>24 passed · 2 issues</small></div>
-            </div>
-            <ul class="checks">
-              <li><span>Contrast (AA)</span><span class="ok">pass</span></li>
-              <li><span>Image alt text</span><span style="color:var(--amber)">2 missing</span></li>
-              <li><span>Form labels</span><span class="ok">pass</span></li>
-            </ul>
-          </div>
-          <div class="panel">
-            <div class="score"><div><b>Palette</b><small>6 colors · roles</small></div></div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:14px">
-              <span style="height:34px;border-radius:7px;background:#14161c"></span><span style="height:34px;border-radius:7px;background:#2b62c9"></span><span style="height:34px;border-radius:7px;background:#f6f3ec"></span>
-              <span style="height:34px;border-radius:7px;background:#555b66"></span><span style="height:34px;border-radius:7px;background:#e8b84a"></span><span style="height:34px;border-radius:7px;background:#3fa877"></span>
-            </div>
-          </div>
-          <div class="panel" style="grid-column:1/-1">
-            <div class="seg"><span>JSON</span><span class="sel">CSS</span><span>Tailwind</span></div>
-<pre class="tokens"><span class="c">/* exported by LupaX */</span>
-:root {
-  <span class="k">--color-text</span>: #14161c;
-  <span class="k">--color-primary</span>: #2b62c9;
-  <span class="k">--font-heading</span>: Inter, sans-serif;
-  <span class="k">--space-4</span>: 16px;
-}</pre>
-          </div>
-        </div>
-      </div>
-    </section>
-  </div>
-
-  <section class="features" aria-labelledby="h-all">
-    <div class="wrap">
-      <p class="eyebrow">Everything included</p>
-      <h2 id="h-all">Every feature is free. No account, no Premium tier.</h2>
-      <div class="cols">
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg><h3>Capture</h3><p>Visible area, region, full page, element or desktop, with an optional delay.</p></div>
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg><h3>Annotate</h3><p>Pen, highlighter, arrows, shapes, text, blur and crop, with undo.</p></div>
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg><h3>Record</h3><p>Tab, window or desktop, with mic, system audio and webcam. Pause and resume.</p></div>
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg><h3>Inspect CSS</h3><p>Box model, styles and contrast on hover. Copy any element's CSS.</p></div>
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="4"/><circle cx="16" cy="16" r="4"/><circle cx="16" cy="8" r="2"/></svg><h3>Design tokens</h3><p>Colors, type and spacing as W3C JSON, CSS variables or Tailwind.</p></div>
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg><h3>Assets</h3><p>Images, SVGs, fonts and icons. Download one, or all as a ZIP.</p></div>
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="2"/><path d="M5 9l7 1 7-1M12 10v5M9 21l3-6 3 6"/></svg><h3>Accessibility</h3><p>A score and a detailed report, with "Show on page" for every issue.</p></div>
-        <div class="col"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg><h3>History</h3><p>Your recent captures and recordings, kept on your device.</p></div>
-      </div>
+    <p class="eyebrow">How it works</p>
+    <h2 class="title" id="h-how">Three workflows, one extension.</h2>
+    <p class="lead">Click the LupaX icon on any page, or use a keyboard shortcut. Everything runs in your browser.</p>
+    <div class="flows">
+      <article class="flow">
+        <span class="num">01</span>
+        <h3>Inspect</h3>
+        <p>Point at any element to read its CSS, then copy it. Or let LupaX read the whole page.</p>
+        <ul><li>Box model, fonts, colors, contrast</li><li>Copy CSS for any element</li><li>Page palette, type scale, spacing</li></ul>
+        <button class="try" data-try="inspect">Try it above ↑</button>
+      </article>
+      <article class="flow">
+        <span class="num">02</span>
+        <h3>Capture &amp; record</h3>
+        <p>Capture any part of a page, mark it up, then save or copy it. Record a tab, a window or your screen.</p>
+        <ul><li>Visible, region, full page, element</li><li>Arrows, text, shapes, blur, crop</li><li>Mic, system audio, webcam, 4K / 60 fps</li></ul>
+        <button class="try" data-try="capture">Try it above ↑</button>
+      </article>
+      <article class="flow">
+        <span class="num">03</span>
+        <h3>Audit &amp; export</h3>
+        <p>Check a page's accessibility and jump to each issue. Take its design system and assets with you.</p>
+        <ul><li>Contrast, alt text, labels, headings</li><li>Tokens: W3C JSON, CSS, Tailwind</li><li>Images, SVGs and fonts as a ZIP</li></ul>
+        <button class="try" data-try="audit">Try it above ↑</button>
+      </article>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="privacy" aria-labelledby="h-priv">
-    <div class="wrap">
-      <div class="priv-grid">
+<section class="block" aria-labelledby="h-incl">
+  <div class="wrap">
+    <p class="eyebrow">Everything included</p>
+    <h2 class="title" id="h-incl">No Premium tier. Every feature is free.</h2>
+    <div class="incl">
+      <div><b>PNG, JPG and PDF</b><span>Save, copy or preview first</span></div>
+      <div><b>Delayed capture</b><span>3, 5 or 10 seconds</span></div>
+      <div><b>Desktop screenshots</b><span>Any window or screen</span></div>
+      <div><b>Pause and resume</b><span>While recording</span></div>
+      <div><b>Keyboard shortcuts</b><span>Capture without the popup</span></div>
+      <div><b>History</b><span>Recent captures, kept locally</span></div>
+      <div><b>Accessibility report</b><span>Detailed, with JSON export</span></div>
+      <div><b>Picked colors</b><span>Saved for later</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="privacy" aria-labelledby="h-priv">
+  <div class="wrap priv">
+    <div>
+      <p class="eyebrow">Private by design</p>
+      <h2 class="title" id="h-priv">Your captures stay on your device.</h2>
+      <p>LupaX has no servers and no accounts, and it doesn't collect analytics. Screenshots, recordings and exports are stored in your browser, and we never receive them.</p>
+      <p>Every line of code is <a href="https://github.com/danbaez/lupax">on GitHub</a>. Details are in the <a href="privacy.html">privacy policy</a>.</p>
+    </div>
+    <div class="nones">
+      <div><span>Account</span><b>None</b></div>
+      <div><span>Uploads</span><b>None</b></div>
+      <div><span>Analytics &amp; telemetry</span><b>None</b></div>
+      <div><span>Watermarks</span><b>None</b></div>
+      <div><span>Site access at install</span><b>None</b></div>
+      <div><span>License</span><b>Apache-2.0</b></div>
+    </div>
+  </div>
+</section>
+
+<section class="block install" id="install" aria-labelledby="h-install">
+  <div class="wrap">
+    <p class="eyebrow">Install LupaX</p>
+    <h2 class="title" id="h-install">Get it from GitHub in a minute.</h2>
+    <p class="lead">The Chrome Web Store release is coming soon. Until then, load LupaX into Chrome yourself:</p>
+    <ol class="steps">
+      <li><h3>Download LupaX</h3><p>Download the latest release and unzip it somewhere you'll keep it.</p>
+        <p><a class="btn primary" href="https://github.com/danbaez/lupax/releases/download/v1.0.0/lupax-1.0.0.zip">Download v1.0.0 (ZIP)</a></p></li>
+      <li><h3>Turn on Developer mode</h3><p>Open <code>chrome://extensions</code> and switch on <strong>Developer mode</strong>, top right.</p></li>
+      <li><h3>Load it</h3><p>Click <strong>Load unpacked</strong> and choose the unzipped <code>lupax-1.0.0</code> folder. Then pin LupaX to the toolbar.</p></li>
+    </ol>
+    <p class="later">Needs Chrome 116 or later. A copy you load yourself doesn't update automatically; the Chrome Web Store version will.</p>
+
+    <div class="faq">
+      <h3>Questions</h3>
+      <details>
+        <summary>Is LupaX really free?</summary>
+        <div><p>Yes. Every feature is free, with no account, trial or watermark. The code is open source under the Apache-2.0 license.</p></div>
+      </details>
+      <details>
+        <summary>Does LupaX send my captures anywhere?</summary>
+        <div><p>No. Captures, recordings and exports stay in your browser and your Downloads folder. LupaX only connects to the sites whose assets you choose to view or export.</p></div>
+      </details>
+      <details>
+        <summary>What permissions does it ask for, and why?</summary>
         <div>
-          <p class="eyebrow">Privacy</p>
-          <h2 id="h-priv">Your captures stay on your device.</h2>
-          <p>Screenshots, recordings and exports are stored in your browser. LupaX has no servers and no accounts, and it doesn't collect analytics. We never receive what you capture.</p>
-          <p>LupaX can read a page only after you click its icon or use one of its shortcuts there. Exporting assets from other sites asks first, and that access is removed when the export ends.</p>
-        </div>
-        <div class="nones">
-          <div><span>Account</span><b>None</b></div>
-          <div><span>Uploads</span><b>None</b></div>
-          <div><span>Analytics &amp; telemetry</span><b>None</b></div>
-          <div><span>Watermarks</span><b>None</b></div>
-          <div><span>Site access at install</span><b>None</b></div>
-          <div><span>License</span><b>Apache-2.0</b></div>
-        </div>
-      </div>
-
-      <div class="acc">
-        <details>
-          <summary>Permissions requested at install</summary>
           <dl class="perm">
             <dt>activeTab</dt><dd>Access to the current tab, only after you click LupaX or use a shortcut there.</dd>
             <dt>scripting</dt><dd>Runs the inspector, page scans and scrolling capture in that tab.</dd>
             <dt>tabCapture</dt><dd>Records the current tab.</dd>
             <dt>desktopCapture</dt><dd>Records or screenshots a window or screen you choose in Chrome's picker.</dd>
             <dt>offscreen</dt><dd>Keeps a tab recording running and prepares files in the background.</dd>
-            <dt>downloads</dt><dd>Saves captures, recordings and exports to your Downloads folder.</dd>
-            <dt>clipboardWrite</dt><dd>Copies captures, colors and CSS to the clipboard.</dd>
-            <dt>storage, unlimitedStorage</dt><dd>Keeps your settings and capture history on your device; recordings can be large.</dd>
+            <dt>downloads</dt><dd>Saves captures, recordings and exports.</dd>
+            <dt>clipboardWrite</dt><dd>Copies captures, colors and CSS.</dd>
+            <dt>storage, unlimitedStorage</dt><dd>Keeps settings and capture history on your device; recordings can be large.</dd>
+            <dt>Optional: other sites</dt><dd>Asked only when you export assets from other sites as a ZIP, and removed when the export ends.</dd>
           </dl>
-        </details>
-        <details>
-          <summary>Optional: access to other sites</summary>
-          <dl class="perm">
-            <dt>&lt;all_urls&gt;</dt><dd>Asked only when you export assets that live on other sites as a ZIP, for those sites only, and removed when the export ends. If you decline, the export still includes everything those sites allow.</dd>
-          </dl>
-        </details>
-      </div>
-      <p class="fine">Details in the <a href="privacy.html">privacy policy</a>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Does it work in other browsers?</summary>
+        <div><p>LupaX is built and tested for Chrome 116 or later. Other Chromium-based browsers may work, but they aren't tested.</p></div>
+      </details>
+      <details>
+        <summary>How do I report a bug or a security problem?</summary>
+        <div><p>Open an <a href="https://github.com/danbaez/lupax/issues">issue on GitHub</a> or email <a href="mailto:support@lupax.app">support@lupax.app</a>. Please report security problems privately, as the <a href="https://github.com/danbaez/lupax/blob/main/SECURITY.md">security policy</a> describes.</p></div>
+      </details>
     </div>
-  </section>
+  </div>
+</section>
 </main>
 
 <footer>
   <div class="wrap">
     <div class="big">
-      <p>Inspect and capture any web page.</p>
-      <a class="cta" aria-disabled="true">Coming soon to Chrome</a>
+      <p>Go beyond the screenshot.</p>
+      <a class="btn primary" href="#install">Get LupaX from GitHub</a>
     </div>
-    <hr class="dashed">
     <div class="small">
-      <p>Source on <a href="https://github.com/danbaez/lupax">GitHub</a> under the <a href="https://github.com/danbaez/lupax/blob/main/LICENSE">Apache-2.0 license</a>. Read the <a href="privacy.html">privacy policy</a>.</p>
-      <p>Bugs and support: <a href="mailto:support@lupax.app">support@lupax.app</a>.</p>
+      <p>Source on <a href="https://github.com/danbaez/lupax">GitHub</a> under the <a href="https://github.com/danbaez/lupax/blob/main/LICENSE">Apache-2.0 license</a> · <a href="privacy.html">Privacy policy</a> · <a href="mailto:support@lupax.app">support@lupax.app</a></p>
       <p>© 2026 Pirabits LLC. LupaX and the LupaX logo are trademarks of Pirabits LLC.</p>
     </div>
   </div>
 </footer>
 
 <script>
-  // 01–04: each number swaps the hero's one-line pitch. It advances on its own unless the visitor prefers reduced motion.
-  const pitches = [
-    '<b>Nothing paywalled.</b> Screenshots, recordings, CSS styles, design tokens, assets and accessibility checks for any web page. Free and open source.',
-    '<b>Inspect any element.</b> Hover to read its font, colors, box model and contrast, then copy its CSS.',
-    '<b>Capture and record.</b> The visible area, a region, the full page or your whole screen, with mic and webcam.',
-    '<b>Audit and export.</b> An accessibility score, design tokens for CSS or Tailwind, and every asset as a ZIP.',
-  ];
-  const pitch = document.getElementById('pitch');
-  const tabs = [...document.querySelectorAll('.steps button')];
-  let current = 0, timer = null;
-  function show(i) {
-    current = i;
-    pitch.innerHTML = pitches[i];
-    tabs.forEach((t, n) => t.setAttribute('aria-selected', String(n === i)));
+(() => {
+  const vp = document.getElementById('viewport'), site = document.getElementById('site'), ov = document.getElementById('ov'), hint = document.getElementById('hint');
+  const tabs = [...document.querySelectorAll('.modes [role=tab]')];
+  const HINTS = {
+    inspect: 'Hover or tap any element on the page to inspect it.',
+    capture: 'Drag across the page to select a region, then annotate or save it.',
+    audit: 'LupaX checked this page. Click an issue to see it on the page.',
+  };
+  let mode = 'inspect';
+
+  // ---- color helpers (real WCAG math) ----
+  const rgb = (s) => (s.match(/[\d.]+/g) || [0, 0, 0]).map(Number);
+  const hex = (s) => '#' + rgb(s).slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+  const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const bgOf = (n) => { for (let e = n; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor, v = rgb(c); if (v.length < 4 || v[3] > 0) return c; } return 'rgb(255, 255, 255)'; };
+  const isLarge = (cs) => parseFloat(cs.fontSize) >= 24 || (parseFloat(cs.fontSize) >= 18.66 && Number(cs.fontWeight) >= 700);
+  const rate = (r, large) => (r >= (large ? 4.5 : 7) ? ['AAA', 'pass'] : r >= (large ? 3 : 4.5) ? ['AA', 'pass'] : ['Fail', 'fail']);
+  const box = (n) => { const a = n.getBoundingClientRect(), b = vp.getBoundingClientRect(); return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height }; };
+  const px = (v) => Math.round(parseFloat(v)) + 'px';
+  const sides = (cs, p) => { const v = ['Top', 'Right', 'Bottom', 'Left'].map((s) => px(cs[p + s])); return v.every((x) => x === v[0]) ? v[0] : v[2] === v[0] && v[3] === v[1] ? `${v[0]} ${v[1]}` : v.join(' '); };
+  const make = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+
+  // ---- Inspect: reads the element's real computed styles ----
+  let picked = null, pinned = false;
+  function inspect(target) {
+    picked = target;
+    ov.innerHTML = '';
+    const cs = getComputedStyle(target), b = box(target), vw = vp.clientWidth, vh = vp.clientHeight;
+    const name = target.tagName.toLowerCase() + (target.classList[0] ? '.' + target.classList[0] : '');
+    const frame = make('div', 'box' + (b.y < 24 ? ' below' : ''), `<span class="tag">${name} · ${Math.round(b.w)} × ${Math.round(b.h)}</span>`);
+    Object.assign(frame.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' });
+    const fg = cs.color, bg = bgOf(target), r = ratio(rgb(fg), rgb(bg)), [grade, cls] = rate(r, isLarge(cs));
+    const fam = cs.fontFamily.split(',')[0].replace(/["']/g, '');
+    const lh = cs.lineHeight === 'normal' ? 'normal' : (parseFloat(cs.lineHeight) / parseFloat(cs.fontSize)).toFixed(2);
+    const tip = make('div', 'tip', `<dl>
+      <dt>font</dt><dd>${fam}, ${cs.fontWeight}</dd>
+      <dt>size</dt><dd>${px(cs.fontSize)} / ${lh}</dd>
+      <dt>color</dt><dd><span class="sw" style="background:${fg}"></span>${hex(fg)}</dd>
+      <dt>background</dt><dd><span class="sw" style="background:${bg}"></span>${hex(bg)}</dd></dl><hr><dl>
+      <dt>contrast</dt><dd class="${cls}">${r.toFixed(2)} · ${grade}</dd>
+      <dt>margin</dt><dd>${sides(cs, 'margin')}</dd>
+      <dt>padding</dt><dd>${sides(cs, 'padding')}</dd></dl>
+      <button type="button">Copy CSS</button>`);
+    tip.querySelector('button').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const css = `.${target.classList[0] || target.tagName.toLowerCase()} {\n  font-family: ${cs.fontFamily};\n  font-size: ${cs.fontSize};\n  font-weight: ${cs.fontWeight};\n  line-height: ${cs.lineHeight};\n  color: ${hex(fg).toLowerCase()};\n  margin: ${sides(cs, 'margin')};\n  padding: ${sides(cs, 'padding')};\n}`;
+      const done = () => toast('CSS copied to your clipboard'), fail = () => toast("Your browser didn't allow copying here");
+      try { navigator.clipboard.writeText(css).then(done, fail); } catch { fail(); }
+    });
+    ov.append(frame, tip);
+    // tooltip below the element, else above, else beside it; always inside the viewport
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let left = Math.min(Math.max(8, b.x), vw - tw - 8), top = b.y + b.h + 12;
+    if (top + th > vh - 8) top = b.y - th - 12;
+    if (top < 8) {
+      top = Math.min(vh - th - 8, Math.max(8, b.y));
+      left = b.x + b.w + 12 + tw < vw ? b.x + b.w + 12 : Math.max(8, b.x - tw - 12);
+    }
+    Object.assign(tip.style, { left: left + 'px', top: top + 'px' });
   }
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const start = () => { if (!reduce) timer = setInterval(() => show((current + 1) % pitches.length), 6000); };
-  tabs.forEach((t) => t.addEventListener('click', () => { clearInterval(timer); show(Number(t.dataset.i)); }));
-  start();
+  const pick = (e) => {
+    const t = e.target instanceof Element && e.target.closest('#site *');
+    return t ? (t.closest('svg') ? t.closest('svg').parentElement : t) : null;
+  };
+
+  // ---- Capture: drag a region, then annotate / copy / save ----
+  let drag = null, sel = null;
+  function drawSel(r, done) {
+    ov.innerHTML = '';
+    const s = make('div', 'sel', `<span class="dim">${Math.round(r.w)} × ${Math.round(r.h)}</span>`);
+    Object.assign(s.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+    ov.append(s);
+    sel = { r, s };
+    if (!done) return;
+    const bar = make('div', 'bar', '<button type="button" data-a="note">Annotate</button><button type="button" data-a="copy">Copy</button><button type="button" class="go" data-a="save">Save PNG</button>');
+    ov.append(bar);
+    const bw = bar.offsetWidth, bh = bar.offsetHeight, vw = vp.clientWidth, vh = vp.clientHeight;
+    let top = r.y + r.h + 10;
+    if (top + bh > vh - 6) top = Math.max(6, r.y + r.h - bh - 10);
+    Object.assign(bar.style, { left: Math.min(Math.max(6, r.x + r.w - bw), vw - bw - 6) + 'px', top: top + 'px' });
+    bar.addEventListener('pointerdown', (e) => e.stopPropagation());
+    bar.addEventListener('click', (e) => {
+      const a = e.target.closest('button')?.dataset.a;
+      if (a === 'note') {
+        s.querySelector('svg')?.remove();
+        const tx = Math.max(4, r.w - 108), ty = Math.min(10, r.h - 30);
+        s.insertAdjacentHTML('beforeend', `<svg viewBox="0 0 ${r.w} ${r.h}" aria-hidden="true"><defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0L8 4L0 8z" fill="#f87171"/></marker></defs>
+          <path d="M${tx + 20} ${ty + 30} Q${r.w * .55} ${r.h * .6} ${r.w * .35} ${r.h * .62}" fill="none" stroke="#f87171" stroke-width="3" marker-end="url(#ah)"/>
+          <rect x="${tx}" y="${ty}" width="100" height="24" rx="5" fill="#f87171"/><text x="${tx + 50}" y="${ty + 16}" fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="Jakarta, sans-serif">Ship this!</text></svg>`);
+      } else if (a === 'copy' || a === 'save') {
+        const f = make('div', 'flash'); vp.append(f); f.classList.add('on');
+        requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); setTimeout(() => f.remove(), 500);
+        toast(a === 'copy' ? 'In LupaX, the capture is now on your clipboard' : 'In LupaX, this saves capture.png to Downloads');
+      }
+    });
+  }
+  function defaultSel() { const b = box(site.querySelector('.s-hero')); drawSel({ x: b.x + 10, y: b.y + 6, w: Math.min(b.w - 20, 380), h: b.h - 12 }, true); }
+
+  // ---- Audit: real checks on the sample page ----
+  function audit() {
+    ov.innerHTML = '';
+    const issues = []; let passed = 0;
+    site.querySelectorAll('*').forEach((n) => {
+      if ([...n.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim())) {
+        const cs = getComputedStyle(n), r = ratio(rgb(cs.color), rgb(bgOf(n))), need = isLarge(cs) ? 3 : 4.5;
+        if (r < need) issues.push({ n, kind: 'fail', text: `Low contrast: ${r.toFixed(2)}:1 (needs ${need}:1)` }); else passed++;
+      }
+      if (n.tagName === 'IMG') { if (!n.hasAttribute('alt')) issues.push({ n, kind: 'fail', text: 'Image has no alt text' }); else passed++; }
+      if (n.tagName === 'BUTTON') { if (!n.textContent.trim() && !n.getAttribute('aria-label')) issues.push({ n, kind: 'fail', text: 'Button has no accessible name' }); else passed++; }
+    });
+    if (!site.querySelector('h1')) issues.push({ n: site.querySelector('h2'), kind: 'warn', text: 'Page has no h1 heading' });
+    const shown = issues.filter((it) => it.n.getClientRects().length); // hidden on small screens: not on the page
+    const score = Math.round((100 * passed) / (passed + shown.length));
+    const color = score >= 90 ? '#4ade80' : score >= 70 ? '#fbbf24' : '#f87171';
+    const rep = make('div', 'report', `<div class="score"><svg width="54" height="54" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#13284f" stroke-width="7"/><circle cx="32" cy="32" r="27" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(170 * score) / 100} 170" transform="rotate(-90 32 32)"/><text x="32" y="38" text-anchor="middle" fill="#eef3fb" font-size="17" font-weight="800" font-family="Jakarta, sans-serif">${score}</text></svg>
+      <div><b>Accessibility</b><small>${passed} passed · ${shown.length} issues</small></div></div><ol></ol>`);
+    const list = rep.querySelector('ol');
+    shown.forEach((it, i) => {
+      const b = box(it.n), warn = it.kind === 'warn' ? ' warn' : '';
+      const pin = make('span', 'pin' + warn, String(i + 1));
+      Object.assign(pin.style, { left: Math.min(b.x + b.w, vp.clientWidth - 14) + 'px', top: Math.max(b.y, 14) + 'px' });
+      ov.append(pin);
+      const li = make('li', '', `<button type="button"><span class="n${warn}">${i + 1}</span><span>${it.text}</span></button>`);
+      li.firstChild.addEventListener('click', () => {
+        ov.querySelector('.hl')?.remove();
+        const h = make('div', 'hl');
+        Object.assign(h.style, { left: b.x - 4 + 'px', top: b.y - 4 + 'px', width: b.w + 8 + 'px', height: b.h + 8 + 'px' });
+        ov.prepend(h);
+      });
+      list.append(li);
+    });
+    ov.append(rep);
+    if (innerWidth > 560) rep.style.top = box(site.querySelector('.s-nav')).h + 10 + 'px'; // below the page's top bar, clear of its pins
+  }
+
+  // ---- shared ----
+  let toastT;
+  function toast(msg) {
+    let t = vp.querySelector('.toast');
+    if (!t) { t = make('div', 'toast'); t.setAttribute('role', 'status'); vp.append(t); }
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400);
+  }
+  function setMode(m, focus) {
+    mode = m; pinned = false; sel = null; drag = null;
+    tabs.forEach((t) => { const on = t.dataset.mode === m; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
+    vp.setAttribute('aria-labelledby', 't-' + m);
+    vp.className = 'viewport ' + m;
+    hint.textContent = HINTS[m];
+    if (m === 'inspect') inspect(site.querySelector('.s-title'));
+    if (m === 'capture') defaultSel();
+    if (m === 'audit') audit();
+  }
+
+  vp.addEventListener('pointermove', (e) => {
+    if (mode === 'inspect' && !pinned && e.pointerType === 'mouse') { const t = pick(e); if (t && t !== picked) inspect(t); }
+    if (mode === 'capture' && drag) {
+      const b = vp.getBoundingClientRect(), x = Math.min(Math.max(e.clientX - b.left, 0), b.width), y = Math.min(Math.max(e.clientY - b.top, 0), b.height);
+      drawSel({ x: Math.min(x, drag.x), y: Math.min(y, drag.y), w: Math.abs(x - drag.x), h: Math.abs(y - drag.y) }, false);
+    }
+  });
+  vp.addEventListener('pointerdown', (e) => {
+    if (mode !== 'capture') return;
+    const b = vp.getBoundingClientRect(); drag = { x: e.clientX - b.left, y: e.clientY - b.top };
+    vp.setPointerCapture(e.pointerId);
+  });
+  const endDrag = () => {
+    if (mode !== 'capture' || !drag) return;
+    drag = null;
+    if (sel && sel.r.w > 24 && sel.r.h > 24) drawSel(sel.r, true); else defaultSel();
+  };
+  vp.addEventListener('pointerup', endDrag);
+  vp.addEventListener('pointercancel', endDrag);
+  vp.addEventListener('click', (e) => {
+    if (mode !== 'inspect' || e.target.closest('.tip')) return;
+    const t = pick(e); if (!t) return;
+    if (t === picked && pinned) { pinned = false; hint.textContent = HINTS.inspect; return; }
+    inspect(t); pinned = true; hint.textContent = 'Pinned. Click it again to unpin, or click another element.';
+  });
+  vp.addEventListener('pointerleave', (e) => { if (mode === 'inspect' && !pinned && e.pointerType === 'mouse') inspect(site.querySelector('.s-title')); });
+
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => setMode(t.dataset.mode));
+    t.addEventListener('keydown', (e) => {
+      const k = { ArrowRight: 1, ArrowLeft: -1, Home: -i, End: tabs.length - 1 - i }[e.key];
+      if (k === undefined) return;
+      e.preventDefault(); setMode(tabs[(i + k + tabs.length) % tabs.length].dataset.mode, true);
+    });
+  });
+  document.querySelectorAll('[data-try]').forEach((b) => b.addEventListener('click', () => {
+    setMode(b.dataset.try);
+    document.getElementById('demo').scrollIntoView({ block: 'center' });
+    tabs.find((t) => t.dataset.mode === b.dataset.try).focus({ preventScroll: true });
+  }));
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => setMode(mode), 150); });
+  setMode('inspect');
+  document.fonts?.ready.then(() => setMode(mode)); // re-measure once the web font has loaded
+})();
 </script>
 </body>
 </html>

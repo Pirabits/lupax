@@ -4,9 +4,10 @@ Capture and inspect web pages in Chrome (Manifest V3): screenshots, recordings, 
 
 ## Load it
 
-1. Open `chrome://extensions`, enable **Developer mode**.
-2. **Load unpacked** → select this folder.
-3. Pin LupaX. Shortcuts: `chrome://extensions/shortcuts`.
+1. Download `lupax-<version>.zip` from the [latest release](https://github.com/danbaez/lupax/releases/latest) and unzip it (or clone this repo).
+2. Open `chrome://extensions`, enable **Developer mode**.
+3. **Load unpacked** → select the unzipped folder (or this repo's folder).
+4. Pin LupaX. Shortcuts: `chrome://extensions/shortcuts`.
 
 Requires Chrome 116+.
 
@@ -65,7 +66,7 @@ Layout:
 | `popup/tokens.js` | Design-token export (JSON / CSS / Tailwind) |
 | `lib/` | Shared modules; `lib/scan.js` holds functions injected into pages, which must stay self-contained (their copied WCAG math is pinned by `tests/unit/wcag-parity.test.mjs`) |
 
-`npm run package` builds the Web Store upload, `dist/lupax-<version>.zip`: the git-tracked extension files only (no `tests/`, `scripts/`, `docs/`, `package.json` or `README.md`) plus `LICENSE` and `NOTICE`, with `manifest.json` at the root. Bump `version` in `manifest.json` before each upload. The website, [lupax.app](https://lupax.app), is the `docs/` folder served by GitHub Pages from `main`: `docs/index.html` (landing page) and `docs/privacy.html` (the privacy policy linked from the store listing). It loads nothing from other servers; its font and icons are copied into `docs/assets/`.
+`npm run package` builds the Web Store upload, `dist/lupax-<version>.zip`: the git-tracked extension files only (no `tests/`, `scripts/`, `docs/`, `package.json` or `README.md`) plus `LICENSE` and `NOTICE`, with `manifest.json` at the root. Bump `version` in `manifest.json` before each upload, attach the same zip to a GitHub release (`gh release create v<version> dist/lupax-<version>.zip`), and update the Download link in `docs/index.html`. The website, [lupax.app](https://lupax.app), is the `docs/` folder served by GitHub Pages from `main`: `docs/index.html` (landing page) and `docs/privacy.html` (the privacy policy linked from the store listing). It loads nothing from other servers; its font and icons are copied into `docs/assets/`.
 
 Font: Plus Jakarta Sans (SIL Open Font License 1.1), bundled in `fonts/` with its license, `fonts/OFL.txt`, which must ship with it.
 
