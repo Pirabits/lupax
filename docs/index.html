@@ -1,13 +1,17 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-type="software">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LupaX — CSS Inspector & Screen Capture</title>
-<meta name="description" content="Inspect CSS, capture screens, record interactions and export design assets, all from one free, open-source Chrome extension. No account, no tracking.">
+<meta name="description" content="Free, open-source Chrome extension for designers and developers: inspect CSS, capture and record the screen, audit accessibility and export design assets. No account, no tracking.">
+<meta name="page-type" content="software">
+<meta name="site-kind" content="software">
+<meta name="theme-color" content="#061230">
+<link rel="canonical" href="https://lupax.app/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="LupaX — Go beyond the screenshot">
-<meta property="og:description" content="Inspect CSS, capture screens, record interactions and export design assets from one free, open-source Chrome extension.">
+<meta property="og:title" content="LupaX — Free CSS inspector and screen capture for Chrome">
+<meta property="og:description" content="Inspect CSS, capture and record the screen, audit accessibility and export design assets. Free and open source.">
 <meta property="og:image" content="https://lupax.app/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -22,81 +26,117 @@
     --bg: #061230; --bg-2: #081632; --card: #0a1836; --card-2: #0f2148;
     --line: #172a52; --line-2: #223a68; --dash: #2a4170;
     --ink: #eef3fb; --ink-2: #b7c6de; --muted: #8597b8;
-    --brand: #7ab8f5; --brand-600: #5ea6f0; --on-brand: #061230;
+    --brand: #7ab8f5; --on-brand: #061230;
     --green: #4ade80; --amber: #fbbf24; --red: #f87171;
     --cream: #f6f3ec;
     --font: 'Jakarta', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+    --top: 92px;           /* height of the top bar; the hero fills the rest of the first screen */
+    --edge: clamp(16px, 4vw, 48px);
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition: none !important; animation: none !important; } }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-  a { color: var(--brand); }
+  body.menu-open { overflow: hidden; }
   :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
-  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 16px; }
-  .eyebrow { font: 600 12px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--brand); margin: 0 0 14px; }
-  h2.title { font-size: clamp(30px, 4vw, 46px); line-height: 1.06; letter-spacing: -.025em; margin: 0 0 16px; font-weight: 800; }
-  .lead { color: var(--ink-2); max-width: 600px; margin: 0; }
-  section.block { padding: 96px 0; border-top: 1px dashed var(--dash); }
+  main:focus { outline: none; }
+  /* one container for every block on the page, so left and right edges line up */
+  .wrap { max-width: 1380px; margin: 0 auto; padding: 0 var(--edge); }
 
-  /* buttons */
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 0 26px; font: 700 14px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; border: 1.5px solid transparent; cursor: pointer; }
+  .skip { position: fixed; left: 12px; top: 12px; z-index: 100; padding: 12px 18px; background: var(--brand); color: var(--on-brand); font-weight: 700; text-decoration: none; transform: translateY(-200%); }
+  .skip:focus { transform: none; }
+
+  /* links: an underline draws on hover */
+  a { color: var(--brand); }
+  .ul, p a, dd a, footer a { color: var(--brand); text-decoration: underline; text-decoration-color: rgba(122, 184, 245, .35); text-underline-offset: 3px;
+    background: linear-gradient(currentColor, currentColor) left 100% / 0 1.5px no-repeat; transition: background-size .25s ease, text-decoration-color .25s; }
+  .ul:hover, p a:hover, dd a:hover, footer a:hover { background-size: 100% 1.5px; text-decoration-color: transparent; }
+
+  .eyebrow { font: 600 12px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--brand); margin: 0 0 16px; }
+  h2.title { font-size: clamp(30px, 4vw, 48px); line-height: 1.06; letter-spacing: -.025em; margin: 0 0 40px; font-weight: 800; max-width: 760px; }
+
+  /* sections: one screen each at 1440x900, heading first and at the top */
+  section.block { min-height: 100svh; padding: 96px 0 72px; border-top: 1px dashed var(--dash); display: flex; flex-direction: column; }
+  section.block > .wrap { flex: 1; width: 100%; display: flex; flex-direction: column; }
+  section.block > .wrap.inst { display: grid; }
+
+  /* buttons: one pair (primary, ghost); they step on hover and press on click */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 0 26px; font: 700 14px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; border: 1.5px solid transparent; cursor: pointer; transition: transform .15s ease, background-color .15s, border-color .15s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(1px) scale(.98); transition-duration: .05s; }
   .btn.primary { background: var(--brand); color: var(--on-brand); }
   .btn.primary:hover { background: #8fc4f7; }
   .btn.ghost { color: var(--ink); border-color: var(--line-2); background: transparent; }
   .btn.ghost:hover { border-color: var(--brand); }
-  .btn.store[aria-disabled="true"] { cursor: default; opacity: .9; }
-  .btn.store[aria-disabled="true"]:hover { background: var(--brand); }
+  .btn.sm { min-height: 44px; padding: 0 18px; font-size: 12px; }
+  .btn[aria-disabled="true"] { cursor: default; }
+  .btn[aria-disabled="true"]:hover, .btn[aria-disabled="true"]:active { transform: none; background: var(--brand); }
   .soon { font: 700 10px/1 var(--mono); letter-spacing: .08em; padding: 4px 6px; border-radius: 4px; background: var(--on-brand); color: var(--brand); }
 
   /* ---------- Top bar ---------- */
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px clamp(16px, 4vw, 48px); position: relative; z-index: 2; }
-  .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; }
-  .brand-box { display: grid; place-items: center; width: 44px; height: 44px; border: 1.5px solid var(--ink); }
+  .top-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--top); }
+  .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; min-height: 44px; }
+  .brand-box { display: grid; place-items: center; width: 44px; height: 44px; border: 1.5px solid var(--ink); transition: border-color .2s; }
+  .brand:hover .brand-box { border-color: var(--brand); }
   .brand b { font-weight: 800; font-size: 20px; letter-spacing: -.01em; }
   .brand b span { color: var(--brand); }
-  .top nav { display: flex; align-items: center; gap: 28px; font-size: 15px; }
-  .top nav a { color: var(--ink-2); text-decoration: none; }
-  .top nav a:hover { color: var(--ink); }
-  .top nav .gh { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); min-height: 44px; }
+  .top nav { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .top nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; color: var(--ink-2); text-decoration: none;
+    background: linear-gradient(var(--brand), var(--brand)) 10px calc(100% - 8px) / 0 1.5px no-repeat; transition: background-size .25s ease, color .2s; }
+  .top nav a:hover { color: var(--ink); background-size: calc(100% - 20px) 1.5px; }
+  .top nav .gh { gap: 12px; color: var(--ink); margin-left: 8px; background: none; }
   .top nav .gh svg { transition: transform .2s; }
   .top nav .gh:hover svg { transform: translateX(5px); }
+  .menu-btn { display: none; min-height: 44px; min-width: 44px; padding: 0 14px; background: transparent; color: var(--ink); border: 1.5px solid var(--line-2); font: 600 14px var(--font); cursor: pointer; position: relative; z-index: 60; transition: border-color .15s, transform .15s; }
+  .menu-btn:hover { border-color: var(--brand); }
+  .menu-btn:active { transform: scale(.97); }
 
   /* ---------- Hero ---------- */
-  .hero { position: relative; overflow: clip; display: grid; grid-template-columns: auto minmax(300px, 440px) minmax(0, 1fr); gap: 0 clamp(28px, 3.5vw, 56px); align-items: center; padding: 24px clamp(16px, 4vw, 48px) 72px; }
-  .hero-mark { position: absolute; right: -120px; top: -150px; width: 760px; height: auto; opacity: .45; pointer-events: none; z-index: 0; }
+  .hero { position: relative; overflow: clip; }
+  .hero-grid { position: relative; z-index: 1; min-height: calc(100svh - var(--top)); display: grid; grid-template-columns: auto minmax(320px, 520px) minmax(0, 1fr); gap: 0 clamp(28px, 3vw, 48px); align-items: center; padding-top: 8px; padding-bottom: 40px; }
+  .hero-mark { position: absolute; right: -140px; top: -160px; width: 760px; height: auto; opacity: .45; pointer-events: none; }
   .hero-mark .ring { stroke: var(--line-2); }
   .hero-mark .cross { stroke: var(--brand); opacity: .55; }
-  .words { display: flex; gap: 8px; align-self: stretch; align-items: flex-end; position: relative; z-index: 1; }
-  .word { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; font-weight: 800; font-size: clamp(64px, 10.5vh, 118px); line-height: .82; letter-spacing: -.02em; text-transform: uppercase; }
+  .words { display: flex; gap: 8px; align-self: stretch; align-items: flex-end; padding-bottom: 24px; }
+  .word { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; font-weight: 800; font-size: clamp(60px, 9.6vh, 110px); line-height: .82; letter-spacing: -.02em; text-transform: uppercase; }
   .word.accent { color: var(--brand); }
-  .intro { position: relative; z-index: 1; }
-  .intro h1 { font-size: clamp(42px, 4.3vw, 62px); line-height: 1; letter-spacing: -.035em; margin: 0 0 22px; font-weight: 800; }
+  .intro h1 { font-size: clamp(38px, 3.7vw, 54px); line-height: 1.02; letter-spacing: -.03em; margin: 0 0 20px; font-weight: 800; }
   .intro h1 em { font-style: normal; color: var(--brand); }
-  .intro p.sub { font-size: 18px; color: var(--ink-2); margin: 0 0 30px; max-width: 420px; }
+  .intro p.sub { font-size: 18px; color: var(--ink-2); margin: 0 0 28px; max-width: 450px; }
   .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
-  .status { display: inline-flex; align-items: center; gap: 10px; margin: 22px 0 0; font: 13px/1.4 var(--mono); color: var(--ink-2); }
-  .status i { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(251, 191, 36, .15); flex: none; }
-  .facts { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 18px; font: 13px/1.4 var(--mono); color: var(--muted); }
+  .facts { margin: 22px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; font: 13px/1.4 var(--mono); color: var(--ink-2); }
   .facts li::before { content: '✓ '; color: var(--green); }
+  .facts .soon-note::before { content: '● '; color: var(--amber); }
+
+  /* the hero enters once, on load */
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+  @keyframes rise-v { from { opacity: 0; transform: rotate(180deg) translateY(-24px); } }
+  [data-enter] .intro > * { animation: rise .7s cubic-bezier(.2, .7, .2, 1) both; }
+  [data-enter] .intro > :nth-child(2) { animation-delay: .06s; }
+  [data-enter] .intro > :nth-child(3) { animation-delay: .12s; }
+  [data-enter] .intro > :nth-child(4) { animation-delay: .18s; }
+  [data-enter] .intro > :nth-child(5) { animation-delay: .24s; }
+  [data-enter] .demo { animation: rise .9s cubic-bezier(.2, .7, .2, 1) .2s both; }
+  [data-enter] .word { animation: rise-v .9s cubic-bezier(.2, .7, .2, 1) both; }
+  [data-enter] .word.accent { animation-delay: .1s; }
 
   /* ---------- Demo ---------- */
-  .demo { position: relative; z-index: 1; min-width: 0; }
+  .demo { min-width: 0; }
   .modes { display: flex; gap: 6px; margin-bottom: 14px; }
-  .modes button { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; background: var(--bg); color: var(--ink-2); border: 1.5px solid var(--line-2); font: 600 14px var(--font); cursor: pointer; }
+  .modes button { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; background: var(--bg); color: var(--ink-2); border: 1.5px solid var(--line-2); font: 600 14px var(--font); cursor: pointer; transition: border-color .15s, color .15s, transform .15s; }
+  .modes button:hover { color: var(--ink); border-color: var(--brand); }
+  .modes button:active { transform: scale(.97); }
   .modes button b { font: 600 12px var(--mono); color: var(--muted); }
   .modes button[aria-selected="true"] { background: var(--card-2); color: var(--ink); border-color: var(--brand); }
   .modes button[aria-selected="true"] b { color: var(--brand); }
   .window { border: 1px solid var(--line-2); border-radius: 14px; background: var(--card); overflow: hidden; box-shadow: 0 40px 90px rgba(0, 0, 0, .45); }
   .chrome { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-  .chrome i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
-  .chrome .url { margin-left: 10px; flex: 1; max-width: 300px; background: var(--bg); border-radius: 6px; padding: 4px 10px; font: 11px var(--mono); color: var(--muted); }
-  .chrome .ext { margin-left: auto; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #10264f; }
+  .chrome i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); flex: none; }
+  .chrome .url { margin-left: 10px; flex: 0 1 230px; min-width: 0; background: var(--bg); border-radius: 6px; padding: 4px 10px; font: 11px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chrome .hint { margin-left: auto; min-width: 0; font: 11px var(--mono); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chrome .ext { margin-left: 8px; flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #10264f; }
   .viewport { position: relative; overflow: hidden; user-select: none; -webkit-user-select: none; }
   .viewport.capture { cursor: crosshair; touch-action: none; }
-  .hint { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; font: 13px/1.4 var(--mono); color: var(--muted); min-height: 20px; }
-  .hint::before { content: ''; width: 6px; height: 6px; background: var(--brand); transform: rotate(45deg); flex: none; }
 
   /* the sample page being inspected */
   .site { background: var(--cream); color: #17181c; font-family: var(--font); padding: 0 0 26px; }
@@ -105,7 +145,7 @@
   .s-menu { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #d9d2c3; border-radius: 8px; background: #fff; color: #17181c; padding: 0; }
   .s-hero { padding: 30px 26px 22px; }
   .s-kicker { display: inline-block; font: 700 10px var(--mono); letter-spacing: .14em; color: #2457c5; margin-bottom: 10px; }
-  .s-title { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: clamp(28px, 3.1vw, 40px); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 12px; max-width: 420px; }
+  .s-title { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: clamp(28px, 2.9vw, 40px); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 12px; max-width: 420px; }
   .s-copy { font-size: 14px; line-height: 1.55; color: #555a64; margin: 0 0 18px; max-width: 380px; }
   .s-ctas { display: flex; align-items: center; gap: 18px; }
   .s-btn { background: #17181c; color: #fff; font-size: 13px; font-weight: 700; padding: 10px 18px; border-radius: 9px; }
@@ -113,7 +153,7 @@
   .s-cards { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; padding: 0 26px; }
   .s-card { background: #fff; border: 1px solid #e6e0d3; border-radius: 12px; padding: 14px; }
   .s-card img { display: block; width: 100%; height: 74px; }
-  .s-card h3 { font-size: 13px; margin: 10px 0 2px; }
+  .s-label { font-size: 13px; font-weight: 700; margin: 10px 0 2px; }
   .s-stat { font-size: 26px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
   .s-note { font-size: 11px; color: #b0a999; margin: 4px 0 0; }
 
@@ -129,13 +169,16 @@
   .tip hr { border: 0; border-top: 1px solid var(--line-2); margin: 8px 0; }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 1px solid #fff5; vertical-align: -1px; margin-right: 6px; }
   .pass { color: var(--green); } .fail { color: var(--red); }
-  .tip button { width: 100%; min-height: 34px; margin-top: 10px; background: var(--brand); color: var(--on-brand); border: 0; border-radius: 8px; font: 700 12px var(--font); cursor: pointer; }
+  .tip button { width: 100%; min-height: 34px; margin-top: 10px; background: var(--brand); color: var(--on-brand); border: 0; border-radius: 8px; font: 700 12px var(--font); cursor: pointer; transition: transform .15s; }
+  .tip button:hover { transform: translateY(-1px); }
+  .tip button:active { transform: scale(.98); }
   .sel { position: absolute; border: 1.5px dashed #fff; box-shadow: 0 0 0 9999px rgba(6, 18, 48, .55); }
   .sel .dim { position: absolute; left: 0; bottom: 100%; margin-bottom: 6px; background: #0b1631; color: var(--ink); font: 600 10px/1 var(--mono); padding: 5px 7px; border-radius: 5px; white-space: nowrap; }
   .sel svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .bar { position: absolute; display: flex; gap: 4px; padding: 5px; background: #0b1631; border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); pointer-events: auto; }
-  .bar button { min-height: 32px; padding: 0 10px; background: transparent; color: var(--ink); border: 0; border-radius: 7px; font: 600 12px var(--font); cursor: pointer; white-space: nowrap; }
+  .bar button { min-height: 32px; padding: 0 10px; background: transparent; color: var(--ink); border: 0; border-radius: 7px; font: 600 12px var(--font); cursor: pointer; white-space: nowrap; transition: background-color .15s, transform .15s; }
   .bar button:hover { background: var(--card-2); }
+  .bar button:active { transform: scale(.96); }
   .bar button.go { background: var(--brand); color: var(--on-brand); }
   .flash { position: absolute; inset: 0; background: #fff; opacity: 0; transition: opacity .35s; pointer-events: none; }
   .flash.on { opacity: .7; transition: none; }
@@ -154,47 +197,57 @@
   .toast { position: absolute; left: 50%; bottom: 14px; transform: translate(-50%, 20px); opacity: 0; background: #0b1631; color: var(--ink); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 14px; font-size: 12.5px; white-space: nowrap; transition: all .25s; pointer-events: none; }
   .toast.on { opacity: 1; transform: translate(-50%, 0); }
 
-  /* ---------- Workflows ---------- */
-  .flows { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
-  .flow { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px; }
-  .flow .num { font: 700 13px var(--mono); color: var(--brand); margin-bottom: 18px; }
-  .flow h3 { font-size: 22px; letter-spacing: -.015em; line-height: 1.15; margin: 0 0 10px; }
-  .flow p { margin: 0 0 16px; color: var(--ink-2); font-size: 15px; }
-  .flow ul { margin: 0 0 22px; padding: 0; list-style: none; font: 13px/1.9 var(--mono); color: var(--ink-2); }
+  /* ---------- How it works ---------- */
+  .flows { flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .frag { align-self: stretch; height: 150px; margin-bottom: 26px; border-radius: 12px; background: radial-gradient(120% 120% at 30% 0%, #163463, #0b1631 70%); border: 1px solid var(--line-2); position: relative; overflow: hidden; }
+  .frag .chip { position: absolute; background: #0b1631; border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; font: 11px/1.6 var(--mono); color: var(--ink-2); box-shadow: 0 12px 28px rgba(0,0,0,.4); }
+  .frag .chip b { color: var(--ink); font-weight: 600; }
+  .frag .chip .ok { color: var(--green); }
+  .frag .el { position: absolute; border: 1.5px solid #2b78d0; background: rgba(43,120,208,.14); border-radius: 3px; }
+  .frag .el span { position: absolute; left: -1.5px; bottom: 100%; margin-bottom: 4px; background: #2b78d0; color: #fff; font: 600 9px/1 var(--mono); padding: 3px 5px; border-radius: 3px; white-space: nowrap; }
+  .frag .cut { position: absolute; border: 1.5px dashed #fff; box-shadow: 0 0 0 999px rgba(6,18,48,.5); }
+  .frag .lines i { position: absolute; height: 8px; border-radius: 4px; background: #2a4170; }
+  .flow { display: flex; flex-direction: column; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 30px; }
+  .flow .num { font: 700 13px var(--mono); color: var(--brand); margin-bottom: 22px; }
+  .flow h3 { font-size: 24px; letter-spacing: -.015em; line-height: 1.15; margin: 0 0 10px; }
+  .flow p { margin: 0 0 18px; color: var(--ink-2); font-size: 15.5px; }
+  .flow ul { margin: 0 0 28px; padding: 0; list-style: none; font: 13.5px/2 var(--mono); color: var(--ink-2); }
   .flow li::before { content: '— '; color: var(--muted); }
-  .flow .try { margin-top: auto; align-self: flex-start; min-height: 44px; padding: 0 16px; background: transparent; color: var(--brand); border: 1.5px solid var(--line-2); font: 600 13px var(--mono); cursor: pointer; }
-  .flow .try:hover { border-color: var(--brand); }
+  .flow .btn { margin-top: auto; }
 
-  /* ---------- Everything included ---------- */
-  .incl { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 40px; border-top: 1px solid var(--line); }
-  .incl div { padding: 20px 20px 20px 0; border-bottom: 1px solid var(--line); }
-  .incl b { display: block; font-size: 15px; margin-bottom: 2px; }
-  .incl span { font-size: 14px; color: var(--muted); }
-
-  /* ---------- Privacy ---------- */
-  .priv { display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: start; }
-  .priv p { color: var(--ink-2); margin: 0 0 14px; max-width: 520px; }
+  /* ---------- Free and private (holds the page's moment) ---------- */
+  .statement { font-size: clamp(34px, 4.6vw, 64px); line-height: 1.04; letter-spacing: -.03em; font-weight: 800; margin: 0 0 48px; max-width: 1000px; }
+  .statement .w { transition: opacity .3s ease, color .3s ease; }
+  .statement.armed .w { opacity: .18; }
+  .statement.armed .w.lit { opacity: 1; }
+  .statement .w.blue { color: var(--brand); }
+  .priv { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 56px; align-items: start; }
+  .priv p { color: var(--ink-2); margin: 0 0 14px; max-width: 520px; font-size: 17px; }
   .nones { background: var(--card); border: 1px solid var(--line-2); border-radius: 16px; padding: 6px 22px; }
-  .nones div { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--ink-2); }
+  .nones div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--ink-2); }
   .nones div:last-child { border-bottom: 0; }
   .nones b { font: 600 14px var(--mono); color: var(--ink); }
+  .incl h3 { font: 600 12px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--brand); margin: 28px 0 10px; }
+  .incl ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+  .incl li { padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
 
   /* ---------- Install + FAQ ---------- */
   .install { background: var(--bg-2); }
-  .ways { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 36px; }
-  .way { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
+  .inst { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: start; }
+  .inst h2.title { margin-bottom: 28px; }
+  .ways { display: grid; gap: 16px; }
+  .way { display: grid; gap: 14px; justify-items: start; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px; }
   .way h3 { font-size: 20px; margin: 0; }
   .way p { margin: 0; color: var(--ink-2); font-size: 15px; }
   .way strong { color: var(--ink); }
   .way code { font: 13px var(--mono); background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 6px; color: var(--ink); }
   .way pre { margin: 0; width: 100%; overflow-x: auto; background: var(--bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 12px 14px; }
   .way pre code { border: 0; padding: 0; background: none; }
-  .way .btn { margin-top: auto; }
-  .later { margin: 18px 0 0; font-size: 14px; color: var(--muted); }
-  .faq { margin-top: 64px; max-width: 860px; }
-  .faq h3 { font-size: 22px; margin: 0 0 8px; }
+  .later { margin: 16px 0 0; font-size: 14px; color: var(--muted); }
+  .faq h3 { font-size: 22px; margin: 6px 0 8px; }
   details { border-bottom: 1px solid var(--line-2); }
-  summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 60px; padding: 14px 0; font-weight: 700; }
+  summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 64px; padding: 14px 0; font-weight: 700; transition: color .15s; }
+  summary:hover { color: var(--brand); }
   summary::-webkit-details-marker { display: none; }
   summary::after { content: '+'; font: 400 26px/1 var(--font); color: var(--brand); transition: transform .2s; flex: none; }
   details[open] summary::after { transform: rotate(45deg); }
@@ -206,60 +259,73 @@
 
   /* ---------- Footer ---------- */
   footer { padding: 56px 0; font: 13px/1.9 var(--mono); color: var(--muted); border-top: 1px dashed var(--dash); }
-  footer a { color: var(--ink-2); }
   footer .big { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 36px; margin-bottom: 22px; border-bottom: 1px dashed var(--dash); }
   footer .big p { margin: 0; font: 800 clamp(26px, 3.4vw, 38px)/1.1 var(--font); color: var(--ink); letter-spacing: -.02em; }
   footer .small p { margin: 0; }
 
   /* ---------- Responsive ---------- */
   @media (max-width: 1180px) {
-    .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+    .frag { height: 130px; }
+    .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
     .words { display: none; }
   }
   @media (max-width: 900px) {
-    .top nav a:not(.gh) { display: none; }
-    .hero { grid-template-columns: minmax(0, 1fr); gap: 44px; padding-top: 8px; }
+    :root { --top: 76px; }
+    .menu-btn { display: inline-flex; align-items: center; }
+    .top nav { display: none; }
+    .top nav.open { display: flex; position: fixed; inset: 0; z-index: 50; flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; padding: 96px var(--edge) 48px; background: var(--bg); font-size: 28px; font-weight: 800; }
+    .top nav.open a { min-height: 64px; padding: 0; color: var(--ink); border-bottom: 1px solid var(--line); background: none; }
+    .top nav.open .gh { margin: 0; }
+    .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 44px; padding-top: 16px; padding-bottom: 56px; }
     .hero-mark { width: 520px; right: -200px; top: -60px; }
     .intro p.sub { max-width: 560px; }
-    .flows { grid-template-columns: 1fr; }
-    .ways { grid-template-columns: minmax(0, 1fr); }
-    .incl { grid-template-columns: 1fr 1fr; }
-    .priv { grid-template-columns: 1fr; gap: 36px; }
-    section.block { padding: 72px 0; }
+    .flows, .priv, .inst { grid-template-columns: minmax(0, 1fr); }
+    .priv, .inst { gap: 40px; }
+    section.block { padding: 72px 0 56px; }
   }
   @media (max-width: 560px) {
     .ctas .btn { flex: 1 1 100%; }
     .modes { gap: 4px; }
     .modes button { flex: 1; justify-content: center; padding: 0 8px; }
-    .modes button b { display: none; }
+    .modes button b, .chrome .url { display: none; }
     .s-nav span:not(.s-logo) { display: none; }
     .s-cards { grid-template-columns: 1fr; }
     .s-card.chart { display: none; }
     .tip { width: 220px; }
     .report { left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
-    .incl { grid-template-columns: 1fr; }
+    .flow .btn, .way .btn { width: 100%; }
+    .incl ul { grid-template-columns: 1fr; }
     .perm { grid-template-columns: 1fr; gap: 0; }
     .perm dd { margin-bottom: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .statement.armed .w { opacity: 1; }
   }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 
 <header class="top">
-  <a class="brand" href="/" aria-label="LupaX home">
-    <span class="brand-box"><svg width="28" height="28" viewBox="0 0 512 512" aria-hidden="true"><g fill="none" stroke="#7ab8f5" stroke-width="30"><circle cx="218" cy="219" r="120"/><path d="M308 308 L425 422 Q434 431 425 440 L417 449 Q409 457 400 449 L290 333" stroke-linecap="round" stroke-linejoin="round"/><path d="M167 165 L206 204 M232 228 L273 269 M273 165 L166 272" stroke-width="32" stroke-linecap="square"/></g></svg></span>
-    <b>Lupa<span>X</span></b>
-  </a>
-  <nav aria-label="Main">
-    <a href="#how">How it works</a>
-    <a href="#privacy">Privacy</a>
-    <a href="#install">Install</a>
-    <a class="gh" href="https://github.com/danbaez/lupax">GitHub<svg width="34" height="14" viewBox="0 0 34 14" aria-hidden="true"><path d="M0 7h32M26 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>
-  </nav>
+  <div class="wrap top-in">
+    <a class="brand" href="/" aria-label="LupaX home">
+      <span class="brand-box"><svg width="28" height="28" viewBox="0 0 512 512" aria-hidden="true"><g fill="none" stroke="#7ab8f5" stroke-width="30"><circle cx="218" cy="219" r="120"/><path d="M308 308 L425 422 Q434 431 425 440 L417 449 Q409 457 400 449 L290 333" stroke-linecap="round" stroke-linejoin="round"/><path d="M167 165 L206 204 M232 228 L273 269 M273 165 L166 272" stroke-width="32" stroke-linecap="square"/></g></svg></span>
+      <b>Lupa<span>X</span></b>
+    </a>
+    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menu</button>
+    <nav id="menu" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/danbaez/lupax">GitHub<svg width="34" height="14" viewBox="0 0 34 14" aria-hidden="true"><path d="M0 7h32M26 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    </nav>
+  </div>
 </header>
 
-<main>
-<section class="hero" aria-labelledby="h-hero">
+<main id="main" tabindex="-1">
+<section class="hero" aria-labelledby="h-hero" data-enter>
   <svg class="hero-mark" viewBox="40 40 440 440" aria-hidden="true">
     <g fill="none" stroke-width="1.5">
       <circle class="ring" cx="218" cy="219" r="120" vector-effect="non-scaling-stroke"/>
@@ -268,147 +334,137 @@
       <path class="cross" d="M167 165 L206 204 M232 228 L273 269 M273 165 L166 272" vector-effect="non-scaling-stroke"/>
     </g>
   </svg>
-
-  <div class="words" aria-hidden="true">
-    <p class="word">Capture</p>
-    <p class="word accent">Inspect</p>
-  </div>
-
-  <div class="intro">
-    <p class="eyebrow">LupaX / Capture + Inspect</p>
-    <h1 id="h-hero">Go beyond the <em>screenshot.</em></h1>
-    <p class="sub">Inspect CSS, capture screens, record interactions and export design assets, all from one free, open-source Chrome extension.</p>
-    <div class="ctas">
-      <!-- TODO after the store listing is approved: make this a link to the Chrome Web Store page, drop aria-disabled and the "Soon" badge -->
-      <a class="btn primary store" aria-disabled="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-        Add to Chrome <span class="soon">Soon</span>
-      </a>
-      <a class="btn ghost" href="https://github.com/danbaez/lupax">View on GitHub</a>
+  <div class="wrap hero-grid">
+    <div class="words" aria-hidden="true">
+      <p class="word">Capture</p>
+      <p class="word accent">Inspect</p>
     </div>
-    <p class="status"><i></i>Coming soon to the Chrome Web Store</p>
-    <ul class="facts"><li>Free forever</li><li>No account</li><li>No tracking</li></ul>
-  </div>
 
-  <div class="demo" id="demo">
-    <div class="modes" role="tablist" aria-label="Try LupaX on a sample page">
-      <button role="tab" id="t-inspect" aria-selected="true" aria-controls="viewport" data-mode="inspect"><b>01</b>Inspect</button>
-      <button role="tab" id="t-capture" aria-selected="false" aria-controls="viewport" data-mode="capture" tabindex="-1"><b>02</b>Capture</button>
-      <button role="tab" id="t-audit" aria-selected="false" aria-controls="viewport" data-mode="audit" tabindex="-1"><b>03</b>Audit</button>
+    <div class="intro">
+      <p class="eyebrow">Go beyond the screenshot</p>
+      <h1 id="h-hero">Free CSS inspector <em>and screen capture</em> for Chrome.</h1>
+      <p class="sub">For designers and developers: read any element's CSS, capture and record the screen, and export design assets. Open source under Apache-2.0.</p>
+      <div class="ctas">
+        <!-- TODO after the store listing is approved: make this a link to the Chrome Web Store page, drop aria-disabled and the "Soon" badge -->
+        <a class="btn primary" aria-disabled="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          Add to Chrome <span class="soon">Soon</span>
+        </a>
+        <a class="btn ghost" href="https://github.com/danbaez/lupax">View on GitHub</a>
+      </div>
+      <ul class="facts"><li>No account</li><li>No tracking</li><li class="soon-note">Chrome Web Store: coming soon</li></ul>
     </div>
-    <div class="window">
-      <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span class="url">northwind.example/launch</span>
-        <span class="ext"><svg width="16" height="16" viewBox="0 0 512 512"><g fill="none" stroke="#7ab8f5" stroke-width="40"><circle cx="218" cy="219" r="120"/><path d="M308 308 L425 422" stroke-linecap="round"/></g></svg></span></div>
-      <div class="viewport" id="viewport" role="tabpanel" aria-labelledby="t-inspect">
-        <!-- A made-up page for the demo. It is real HTML: the inspector and the audit read its actual styles. -->
-        <div class="site" id="site" aria-hidden="true">
-          <div class="s-nav"><span class="s-logo">Northwind</span><span>Product</span><span>Pricing</span><span>Docs</span>
-            <button class="s-menu" tabindex="-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
-          <div class="s-hero">
-            <span class="s-kicker">NEW · VERSION 2.0</span>
-            <h2 class="s-title">Ship pages your users love.</h2>
-            <p class="s-copy">Analytics, A/B tests and heatmaps in one lightweight script. Set up in five minutes.</p>
-            <div class="s-ctas"><span class="s-btn">Start free</span><span class="s-link">See pricing →</span></div>
+
+    <div class="demo" id="demo">
+      <div class="modes" role="tablist" aria-label="Try LupaX on a sample page">
+        <button role="tab" id="t-inspect" aria-selected="true" aria-controls="viewport" data-mode="inspect"><b>01</b>Inspect</button>
+        <button role="tab" id="t-capture" aria-selected="false" aria-controls="viewport" data-mode="capture" tabindex="-1"><b>02</b>Capture</button>
+        <button role="tab" id="t-audit" aria-selected="false" aria-controls="viewport" data-mode="audit" tabindex="-1"><b>03</b>Audit</button>
+      </div>
+      <div class="window">
+        <div class="chrome"><i></i><i></i><i></i><span class="url" aria-hidden="true">northwind.example/launch</span>
+          <span class="hint" id="hint" aria-live="polite">Hover any element</span>
+          <span class="ext" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 512 512"><g fill="none" stroke="#7ab8f5" stroke-width="40"><circle cx="218" cy="219" r="120"/><path d="M308 308 L425 422" stroke-linecap="round"/></g></svg></span></div>
+        <div class="viewport" id="viewport" role="tabpanel" aria-labelledby="t-inspect">
+          <!-- A made-up page for the demo. It is real HTML: the inspector and the audit read its actual styles.
+               Its headings are plain text (data-tag says what they stand for) so they stay out of this page's outline. -->
+          <div class="site" id="site" aria-hidden="true">
+            <div class="s-nav"><span class="s-logo">Northwind</span><span>Product</span><span>Pricing</span><span>Docs</span>
+              <button class="s-menu" tabindex="-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+            <div class="s-hero">
+              <span class="s-kicker">NEW · VERSION 2.0</span>
+              <div class="s-title" data-tag="h2">Ship pages your users love.</div>
+              <p class="s-copy">Analytics, A/B tests and heatmaps in one lightweight script. Set up in five minutes.</p>
+              <div class="s-ctas"><span class="s-btn">Start free</span><span class="s-link">See pricing →</span></div>
+            </div>
+            <div class="s-cards">
+              <div class="s-card chart"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 74' preserveAspectRatio='none'%3E%3Cpath d='M0 60 C30 55 40 30 70 36 S110 20 130 24 S170 6 200 10 L200 74 L0 74Z' fill='%23dbe6fb'/%3E%3Cpath d='M0 60 C30 55 40 30 70 36 S110 20 130 24 S170 6 200 10' fill='none' stroke='%232457c5' stroke-width='2.5'/%3E%3C/svg%3E"><div class="s-label" data-tag="h3">Weekly visitors</div></div>
+              <div class="s-card"><div class="s-stat">+38%</div><div class="s-label" data-tag="h3">Conversion</div><p class="s-note">Compared with the last 30 days</p></div>
+            </div>
           </div>
-          <div class="s-cards">
-            <div class="s-card chart"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 74' preserveAspectRatio='none'%3E%3Cpath d='M0 60 C30 55 40 30 70 36 S110 20 130 24 S170 6 200 10 L200 74 L0 74Z' fill='%23dbe6fb'/%3E%3Cpath d='M0 60 C30 55 40 30 70 36 S110 20 130 24 S170 6 200 10' fill='none' stroke='%232457c5' stroke-width='2.5'/%3E%3C/svg%3E"><h3>Weekly visitors</h3></div>
-            <div class="s-card"><div class="s-stat">+38%</div><h3>Conversion</h3><p class="s-note">Compared with the last 30 days</p></div>
-          </div>
+          <div class="ov" id="ov"></div>
         </div>
-        <div class="ov" id="ov"></div>
       </div>
     </div>
-    <p class="hint" id="hint" aria-live="polite">Hover or tap any element on the page to inspect it.</p>
   </div>
 </section>
 
 <section class="block" id="how" aria-labelledby="h-how">
   <div class="wrap">
-    <p class="eyebrow">How it works</p>
-    <h2 class="title" id="h-how">Three workflows, one extension.</h2>
-    <p class="lead">Click the LupaX icon on any page, or use a keyboard shortcut. Everything runs in your browser.</p>
+    <h2 class="title" id="h-how">Three workflows in one extension.</h2>
     <div class="flows">
       <article class="flow">
+        <div class="frag" aria-hidden="true"><div class="lines"><i style="left:18px;top:22px;width:46%"></i><i style="left:18px;top:40px;width:30%"></i><i style="left:18px;top:112px;width:38%"></i></div><div class="el" style="left:18px;top:62px;width:44%;height:34px"><span>h1.title · 312 × 34</span></div><div class="chip" style="right:14px;top:22px;width:46%"><b>Georgia</b>, 700<br>40px / 1.05<br>contrast <span class="ok">16.0 · AAA</span></div></div>
         <span class="num">01</span>
         <h3>Inspect</h3>
-        <p>Point at any element to read its CSS, then copy it. Or let LupaX read the whole page.</p>
-        <ul><li>Box model, fonts, colors, contrast</li><li>Copy CSS for any element</li><li>Page palette, type scale, spacing</li></ul>
-        <button class="try" data-try="inspect">Try it above ↑</button>
+        <p>Read any element's CSS, then copy it.</p>
+        <ul><li>Box model, fonts, colors</li><li>Contrast grades</li><li>Page palette and type scale</li></ul>
+        <button class="btn ghost sm" data-try="inspect">Try Inspect</button>
       </article>
       <article class="flow">
+        <div class="frag" aria-hidden="true"><div class="lines"><i style="left:18px;top:22px;width:60%"></i><i style="left:18px;top:40px;width:42%"></i><i style="left:18px;top:120px;width:50%"></i></div><div class="cut" style="left:28%;top:52px;width:44%;height:58px"></div><div class="chip" style="right:14px;bottom:12px;padding:7px 10px"><b>Copy</b> &nbsp; <b style="color:#7ab8f5">Save PNG</b></div><div class="chip" style="left:14px;top:12px;padding:6px 9px"><span style="color:#f87171">●</span> REC 00:12</div></div>
         <span class="num">02</span>
         <h3>Capture &amp; record</h3>
-        <p>Capture any part of a page, mark it up, then save or copy it. Record a tab, a window or your screen.</p>
-        <ul><li>Visible, region, full page, element</li><li>Arrows, text, shapes, blur, crop</li><li>Mic, system audio, webcam, 4K / 60 fps</li></ul>
-        <button class="try" data-try="capture">Try it above ↑</button>
+        <p>Capture any part of a page, or record your screen.</p>
+        <ul><li>Region, full page, element</li><li>Arrows, text, blur, crop</li><li>Mic and webcam, up to 4K</li></ul>
+        <button class="btn ghost sm" data-try="capture">Try Capture</button>
       </article>
       <article class="flow">
+        <div class="frag" aria-hidden="true"><div class="chip" style="left:14px;top:18px;display:flex;gap:10px;align-items:center"><svg width="44" height="44" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#13284f" stroke-width="8"/><circle cx="32" cy="32" r="26" fill="none" stroke="#4ade80" stroke-width="8" stroke-linecap="round" stroke-dasharray="150 164" transform="rotate(-90 32 32)"/><text x="32" y="38" text-anchor="middle" fill="#eef3fb" font-size="17" font-weight="800" font-family="Jakarta, sans-serif">92</text></svg><span><b>24 passed</b><br>2 issues</span></div><div class="chip" style="right:14px;bottom:14px">--color-primary: <b>#2457c5</b><br>--space-4: <b>16px</b></div></div>
         <span class="num">03</span>
         <h3>Audit &amp; export</h3>
-        <p>Check a page's accessibility and jump to each issue. Take its design system and assets with you.</p>
-        <ul><li>Contrast, alt text, labels, headings</li><li>Tokens: W3C JSON, CSS, Tailwind</li><li>Images, SVGs and fonts as a ZIP</li></ul>
-        <button class="try" data-try="audit">Try it above ↑</button>
+        <p>Check accessibility and keep the design system.</p>
+        <ul><li>Contrast, alt text, labels</li><li>Tokens for CSS or Tailwind</li><li>Images and fonts as a ZIP</li></ul>
+        <button class="btn ghost sm" data-try="audit">Try Audit</button>
       </article>
-    </div>
-  </div>
-</section>
-
-<section class="block" aria-labelledby="h-incl">
-  <div class="wrap">
-    <p class="eyebrow">Everything included</p>
-    <h2 class="title" id="h-incl">No Premium tier. Every feature is free.</h2>
-    <div class="incl">
-      <div><b>PNG, JPG and PDF</b><span>Save, copy or preview first</span></div>
-      <div><b>Delayed capture</b><span>3, 5 or 10 seconds</span></div>
-      <div><b>Desktop screenshots</b><span>Any window or screen</span></div>
-      <div><b>Pause and resume</b><span>While recording</span></div>
-      <div><b>Keyboard shortcuts</b><span>Capture without the popup</span></div>
-      <div><b>History</b><span>Recent captures, kept locally</span></div>
-      <div><b>Accessibility report</b><span>Detailed, with JSON export</span></div>
-      <div><b>Picked colors</b><span>Saved for later</span></div>
     </div>
   </div>
 </section>
 
 <section class="block" id="privacy" aria-labelledby="h-priv">
-  <div class="wrap priv">
-    <div>
-      <p class="eyebrow">Private by design</p>
-      <h2 class="title" id="h-priv">Your captures stay on your device.</h2>
-      <p>LupaX has no servers and no accounts, and it doesn't collect analytics. Screenshots, recordings and exports are stored in your browser, and we never receive them.</p>
-      <p>Every line of code is <a href="https://github.com/danbaez/lupax">on GitHub</a>. Details are in the <a href="privacy.html">privacy policy</a>.</p>
-    </div>
-    <div class="nones">
-      <div><span>Account</span><b>None</b></div>
-      <div><span>Uploads</span><b>None</b></div>
-      <div><span>Analytics &amp; telemetry</span><b>None</b></div>
-      <div><span>Watermarks</span><b>None</b></div>
-      <div><span>Site access at install</span><b>None</b></div>
-      <div><span>License</span><b>Apache-2.0</b></div>
+  <div class="wrap">
+    <h2 class="statement" id="h-priv">No account. No uploads. No paywall. <span class="blue">Your captures stay on your device.</span></h2>
+    <div class="priv">
+      <div>
+        <p>LupaX has no servers and collects no analytics. Every feature is free, and every line of code is <a href="https://github.com/danbaez/lupax">on GitHub</a>.</p>
+        <p>Read the <a href="privacy.html">privacy policy</a>.</p>
+        <div class="incl">
+          <h3>Also included</h3>
+          <ul><li>PNG, JPG and PDF</li><li>Delayed capture</li><li>Desktop screenshots</li><li>Pause and resume</li><li>Keyboard shortcuts</li><li>Local history</li></ul>
+        </div>
+      </div>
+      <div class="nones">
+        <div><span>Account</span><b>None</b></div>
+        <div><span>Uploads</span><b>None</b></div>
+        <div><span>Analytics &amp; telemetry</span><b>None</b></div>
+        <div><span>Watermarks</span><b>None</b></div>
+        <div><span>Paid tier</span><b>None</b></div>
+        <div><span>Site access at install</span><b>None</b></div>
+        <div><span>License</span><b>Apache-2.0</b></div>
+      </div>
     </div>
   </div>
 </section>
 
 <section class="block install" id="install" aria-labelledby="h-install">
-  <div class="wrap">
-    <p class="eyebrow">Install LupaX</p>
-    <h2 class="title" id="h-install">Get LupaX.</h2>
-    <div class="ways">
-      <div class="way">
-        <h3>Chrome Web Store</h3>
-        <p>The easiest way to install LupaX, with automatic updates. The listing is coming soon.</p>
-        <!-- TODO after the store listing is approved: link this to the Chrome Web Store page and drop aria-disabled -->
-        <a class="btn primary store" aria-disabled="true">Add to Chrome <span class="soon">Soon</span></a>
-      </div>
-      <div class="way">
-        <h3>From source</h3>
-        <p>For developers: clone the repository, then in <code>chrome://extensions</code> turn on <strong>Developer mode</strong>, click <strong>Load unpacked</strong> and choose the <code>lupax</code> folder.</p>
+  <div class="wrap inst">
+    <div>
+      <h2 class="title" id="h-install">Get LupaX.</h2>
+      <div class="ways">
+        <div class="way">
+          <h3>Chrome Web Store</h3>
+          <p>One click, with automatic updates. The listing is coming soon.</p>
+          <!-- TODO after the store listing is approved: link this to the Chrome Web Store page, drop aria-disabled and the "Soon" badge -->
+          <a class="btn primary" aria-disabled="true">Add to Chrome <span class="soon">Soon</span></a>
+        </div>
+        <div class="way">
+          <h3>From source</h3>
+          <p>Clone it, turn on <strong>Developer mode</strong> in <code>chrome://extensions</code>, then <strong>Load unpacked</strong> the <code>lupax</code> folder.</p>
 <pre><code>git clone https://github.com/danbaez/lupax.git</code></pre>
-        <a class="btn ghost" href="https://github.com/danbaez/lupax">View on GitHub</a>
+        </div>
       </div>
+      <p class="later">Needs Chrome 116 or later.</p>
     </div>
-    <p class="later">Needs Chrome 116 or later.</p>
-
     <div class="faq">
       <h3>Questions</h3>
       <details>
@@ -463,16 +519,54 @@
 
 <script>
 (() => {
+  // ---------- phone menu ----------
+  const menuBtn = document.querySelector('.menu-btn'), menu = document.getElementById('menu');
+  const setMenu = (open) => {
+    menu.classList.toggle('open', open);
+    document.body.classList.toggle('menu-open', open);
+    menuBtn.setAttribute('aria-expanded', String(open));
+    menuBtn.textContent = open ? 'Close' : 'Menu';
+  };
+  menuBtn.addEventListener('click', () => setMenu(menuBtn.getAttribute('aria-expanded') !== 'true'));
+  menu.addEventListener('click', (e) => { if (e.target.closest('a')) setMenu(false); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && menu.classList.contains('open')) { setMenu(false); menuBtn.focus(); } });
+  matchMedia('(min-width: 901px)').addEventListener('change', (e) => { if (e.matches) setMenu(false); });
+
+  // ---------- the page's moment: the privacy statement lights up word by word as its section scrolls in ----------
+  const statement = document.querySelector('.statement');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const words = [];
+    const split = (node) => {
+      for (const child of [...node.childNodes]) {
+        if (child.nodeType === 3) {
+          const frag = document.createDocumentFragment();
+          child.textContent.split(/(\s+)/).forEach((part) => {
+            if (!part.trim()) { frag.append(part); return; }
+            const s = document.createElement('span'); s.className = 'w' + (node.classList?.contains('blue') ? ' blue' : ''); s.textContent = part;
+            words.push(s); frag.append(s);
+          });
+          child.replaceWith(frag);
+        } else if (child.nodeType === 1) split(child);
+      }
+    };
+    split(statement);
+    statement.classList.add('armed');
+    const update = () => {
+      const r = statement.getBoundingClientRect(), vh = innerHeight;
+      const p = Math.min(1, Math.max(0, (vh * 0.9 - r.top) / (vh * 0.55)));
+      const n = Math.round(p * words.length);
+      words.forEach((w, i) => w.classList.toggle('lit', i < n));
+    };
+    addEventListener('scroll', update, { passive: true }); addEventListener('resize', update); update();
+  }
+
+  // ---------- demo ----------
   const vp = document.getElementById('viewport'), site = document.getElementById('site'), ov = document.getElementById('ov'), hint = document.getElementById('hint');
   const tabs = [...document.querySelectorAll('.modes [role=tab]')];
-  const HINTS = {
-    inspect: 'Hover or tap any element on the page to inspect it.',
-    capture: 'Drag across the page to select a region, then annotate or save it.',
-    audit: 'LupaX checked this page. Click an issue to see it on the page.',
-  };
+  const HINTS = { inspect: 'Hover any element', capture: 'Drag to select a region', audit: 'Click an issue to find it' };
   let mode = 'inspect';
 
-  // ---- color helpers (real WCAG math) ----
+  // real WCAG math
   const rgb = (s) => (s.match(/[\d.]+/g) || [0, 0, 0]).map(Number);
   const hex = (s) => '#' + rgb(s).slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase();
   const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
@@ -484,14 +578,15 @@
   const px = (v) => Math.round(parseFloat(v)) + 'px';
   const sides = (cs, p) => { const v = ['Top', 'Right', 'Bottom', 'Left'].map((s) => px(cs[p + s])); return v.every((x) => x === v[0]) ? v[0] : v[2] === v[0] && v[3] === v[1] ? `${v[0]} ${v[1]}` : v.join(' '); };
   const make = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+  const tagOf = (n) => n.dataset.tag || n.tagName.toLowerCase();
 
-  // ---- Inspect: reads the element's real computed styles ----
+  // Inspect: the element's real computed styles
   let picked = null, pinned = false;
   function inspect(target) {
     picked = target;
     ov.innerHTML = '';
     const cs = getComputedStyle(target), b = box(target), vw = vp.clientWidth, vh = vp.clientHeight;
-    const name = target.tagName.toLowerCase() + (target.classList[0] ? '.' + target.classList[0] : '');
+    const name = tagOf(target) + (target.classList[0] ? '.' + target.classList[0] : '');
     const frame = make('div', 'box' + (b.y < 24 ? ' below' : ''), `<span class="tag">${name} · ${Math.round(b.w)} × ${Math.round(b.h)}</span>`);
     Object.assign(frame.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' });
     const fg = cs.color, bg = bgOf(target), r = ratio(rgb(fg), rgb(bg)), [grade, cls] = rate(r, isLarge(cs));
@@ -508,12 +603,11 @@
       <button type="button">Copy CSS</button>`);
     tip.querySelector('button').addEventListener('click', (e) => {
       e.stopPropagation();
-      const css = `.${target.classList[0] || target.tagName.toLowerCase()} {\n  font-family: ${cs.fontFamily};\n  font-size: ${cs.fontSize};\n  font-weight: ${cs.fontWeight};\n  line-height: ${cs.lineHeight};\n  color: ${hex(fg).toLowerCase()};\n  margin: ${sides(cs, 'margin')};\n  padding: ${sides(cs, 'padding')};\n}`;
+      const css = `.${target.classList[0] || tagOf(target)} {\n  font-family: ${cs.fontFamily};\n  font-size: ${cs.fontSize};\n  font-weight: ${cs.fontWeight};\n  line-height: ${cs.lineHeight};\n  color: ${hex(fg).toLowerCase()};\n  margin: ${sides(cs, 'margin')};\n  padding: ${sides(cs, 'padding')};\n}`;
       const done = () => toast('CSS copied to your clipboard'), fail = () => toast("Your browser didn't allow copying here");
       try { navigator.clipboard.writeText(css).then(done, fail); } catch { fail(); }
     });
     ov.append(frame, tip);
-    // tooltip below the element, else above, else beside it; always inside the viewport
     const tw = tip.offsetWidth, th = tip.offsetHeight;
     let left = Math.min(Math.max(8, b.x), vw - tw - 8), top = b.y + b.h + 12;
     if (top + th > vh - 8) top = b.y - th - 12;
@@ -528,7 +622,7 @@
     return t ? (t.closest('svg') ? t.closest('svg').parentElement : t) : null;
   };
 
-  // ---- Capture: drag a region, then annotate / copy / save ----
+  // Capture: drag a region, then annotate / copy / save
   let drag = null, sel = null;
   function drawSel(r, done) {
     ov.innerHTML = '';
@@ -561,7 +655,7 @@
   }
   function defaultSel() { const b = box(site.querySelector('.s-hero')); drawSel({ x: b.x + 10, y: b.y + 6, w: Math.min(b.w - 20, 380), h: b.h - 12 }, true); }
 
-  // ---- Audit: real checks on the sample page ----
+  // Audit: real checks on the sample page
   function audit() {
     ov.innerHTML = '';
     const issues = []; let passed = 0;
@@ -573,8 +667,8 @@
       if (n.tagName === 'IMG') { if (!n.hasAttribute('alt')) issues.push({ n, kind: 'fail', text: 'Image has no alt text' }); else passed++; }
       if (n.tagName === 'BUTTON') { if (!n.textContent.trim() && !n.getAttribute('aria-label')) issues.push({ n, kind: 'fail', text: 'Button has no accessible name' }); else passed++; }
     });
-    if (!site.querySelector('h1')) issues.push({ n: site.querySelector('h2'), kind: 'warn', text: 'Page has no h1 heading' });
-    const shown = issues.filter((it) => it.n.getClientRects().length); // hidden on small screens: not on the page
+    if (!site.querySelector('[data-tag="h1"]')) issues.push({ n: site.querySelector('.s-title'), kind: 'warn', text: 'Page has no h1 heading' });
+    const shown = issues.filter((it) => it.n.getClientRects().length);
     const score = Math.round((100 * passed) / (passed + shown.length));
     const color = score >= 90 ? '#4ade80' : score >= 70 ? '#fbbf24' : '#f87171';
     const rep = make('div', 'report', `<div class="score"><svg width="54" height="54" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#13284f" stroke-width="7"/><circle cx="32" cy="32" r="27" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(170 * score) / 100} 170" transform="rotate(-90 32 32)"/><text x="32" y="38" text-anchor="middle" fill="#eef3fb" font-size="17" font-weight="800" font-family="Jakarta, sans-serif">${score}</text></svg>
@@ -595,10 +689,9 @@
       list.append(li);
     });
     ov.append(rep);
-    if (innerWidth > 560) rep.style.top = box(site.querySelector('.s-nav')).h + 10 + 'px'; // below the page's top bar, clear of its pins
+    if (innerWidth > 560) rep.style.top = box(site.querySelector('.s-nav')).h + 10 + 'px'; // below the sample's top bar, clear of its pins
   }
 
-  // ---- shared ----
   let toastT;
   function toast(msg) {
     let t = vp.querySelector('.toast');
@@ -640,7 +733,7 @@
     if (mode !== 'inspect' || e.target.closest('.tip')) return;
     const t = pick(e); if (!t) return;
     if (t === picked && pinned) { pinned = false; hint.textContent = HINTS.inspect; return; }
-    inspect(t); pinned = true; hint.textContent = 'Pinned. Click it again to unpin, or click another element.';
+    inspect(t); pinned = true; hint.textContent = 'Pinned: click again to unpin';
   });
   vp.addEventListener('pointerleave', (e) => { if (mode === 'inspect' && !pinned && e.pointerType === 'mouse') inspect(site.querySelector('.s-title')); });
 
@@ -659,7 +752,9 @@
   }));
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => setMode(mode), 150); });
   setMode('inspect');
-  document.fonts?.ready.then(() => setMode(mode)); // re-measure once the web font has loaded
+  document.fonts?.ready.then(() => setMode(mode));
+  // the hero animation shifts the demo for ~1s; measure again once it has landed
+  setTimeout(() => setMode(mode), 1200);
 })();
 </script>
 </body>
