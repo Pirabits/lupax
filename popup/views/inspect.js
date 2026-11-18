@@ -222,7 +222,8 @@ function renderInspect(d) {
     const [k, i] = el.dataset.comp.split(':');
     const c = comps[k][+i];
     const css = Object.entries(c).filter(([key]) => !['count', 'label', 'selector', 'placeholder'].includes(key)).map(([key, v]) => `${key.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase()).replace(/^bg$/, 'background')}: ${v};`).join('\n');
-    copy(`/* ${c.selector} */\n${css}`, 'component CSS');
+    // the selector comes from the page: a "*/" in it would end the comment and turn the rest into live CSS
+    copy(`/* ${String(c.selector).replace(/\*\//g, '* /')} */\n${css}`, 'component CSS');
   }));
 }
 

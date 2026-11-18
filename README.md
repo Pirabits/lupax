@@ -1,6 +1,6 @@
 # LupaX
 
-All-in-one web inspector for Chrome (Manifest V3): screenshots, screen recording, style inspection, asset extraction and accessibility checks.
+Capture and inspect web pages in Chrome (Manifest V3): screenshots, recordings, CSS styles, assets and accessibility checks, for designers and developers.
 
 ## Load it
 
@@ -29,13 +29,14 @@ Requires Chrome 116+.
 
 - Chrome popups max out at 800×600 px, so long views (Capture, Style Inspector) scroll with a pinned action button.
 - Tab recording with mic/webcam needs a one-time grant (`permissions.html`) because offscreen documents can’t show permission prompts. The popup opens it before recording; the record shortcut opens it when a grant is missing.
-- Site access: LupaX has no standing access to websites (no “read and change all your data” warning at install). Chrome gives it access to a tab when you click the LupaX icon or use one of its shortcuts there, and keeps it through reloads and pages on the same site until the tab goes to another site. ZIP export asks for access to the sites the assets come from (`optional_host_permissions`); if declined, assets from sites that allow cross-site downloads (CORS) are still exported. Asset sizes and font previews in the popup appear for those sites, or once access was granted.
+- Site access: LupaX has no standing access to websites (no “read and change all your data” warning at install). Chrome gives it access to a tab when you click the LupaX icon or use one of its shortcuts there, and keeps it through reloads and pages on the same site until the tab goes to another site. ZIP export asks for access to the sites the assets come from (`optional_host_permissions`) and gives that access back when the export ends (also at the next start, if the export never finished); if declined, assets from sites that allow cross-site downloads (CORS) are still exported. Asset sizes and font previews in the popup appear for sites that allow CORS. Asset requests never carry the user's cookies.
 - `chrome://` pages and the Web Store can’t be scanned, inspected or scroll-captured; on `chrome://` pages a visible-area screenshot works.
 - Scroll-and-stitch uses window scrolling; inner scroll containers capture one viewport.
 - Cursor highlight is drawn in the page, so it shows in tab recordings and in screen recordings only over the browser tab.
-- Recordings are WebM. They are written to IndexedDB in 1-second chunks while recording, so long recordings don't live in memory; if a recording is interrupted (browser crash, recorder window closed, extension updated), the chunks are recovered into history as `…-recovered.webm`: right away for a closed recorder window or an update, otherwise on the next browser start.
+- Recordings are WebM, with the duration written into the file when it is saved (MediaRecorder leaves it out, which leaves players unable to show the length or seek; `lib/webm.js`). They are written to IndexedDB in 1-second chunks while recording, so long recordings don't live in memory; if a recording is interrupted (browser crash, recorder window closed, extension updated), the chunks are recovered into history as `…-recovered.webm`: right away for a closed recorder window or an update, otherwise on the next browser start.
 - History keeps the latest 60 screenshots/exports and 20 recordings (`HISTORY_LIMITS` in `lib/db.js`). Captures waiting for Save in the editor are kept for 24 hours (`PENDING_TTL_MS`), then count toward the limit like any other capture. Downloaded files are not affected.
 - Auto copy to clipboard is skipped for images over 20 MB (the toast says so).
+- ZIP export: up to 10,000 assets and 1 GB per export, 100 MB per asset (larger ones are skipped and counted in the toast); the writer has no Zip64. File names come from the page, so control and bidi characters are removed and the extension must suit the asset type (an “image” named `setup.exe` is saved as `setup_exe.bin`).
 - Errors appear as a toast in the page, with the toolbar badge (`!`) and tooltip as a fallback on pages Chrome won't let extensions script.
 
 ## Development
@@ -43,7 +44,7 @@ Requires Chrome 116+.
 No build step and no runtime dependencies; the extension loads straight from this folder. Node 22+ is only needed for tests.
 
 ```sh
-npm test            # unit tests (node:test) — zip, pdf, color, format, settings, history limits, tokens, WCAG parity
+npm test            # unit tests (node:test) — zip, pdf, webm, color, format, settings, history limits, tokens, WCAG parity
 npm run test:e2e    # end-to-end: real Chrome + this extension + tests/e2e/fixtures/site.html  (~50 s, headless)
 npm run test:e2e -- --headed        # watch it run
 npm run test:e2e -- --only record   # run tests whose name contains "record"
@@ -64,6 +65,6 @@ Layout:
 | `popup/tokens.js` | Design-token export (JSON / CSS / Tailwind) |
 | `lib/` | Shared modules; `lib/scan.js` holds functions injected into pages, which must stay self-contained (their copied WCAG math is pinned by `tests/unit/wcag-parity.test.mjs`) |
 
-When packaging for the Web Store, leave out `tests/`, `package.json` and `README.md`.
+`npm run package` builds the Web Store upload, `dist/lupax-<version>.zip`: the git-tracked extension files only (no `tests/`, `scripts/`, `docs/`, `package.json` or `README.md`), with `manifest.json` at the root. Bump `version` in `manifest.json` before each upload. The privacy policy linked from the store listing is `docs/privacy.html` (GitHub Pages, `/docs` folder).
 
-Font: Plus Jakarta Sans (SIL Open Font License 1.1), bundled in `fonts/`.
+Font: Plus Jakarta Sans (SIL Open Font License 1.1), bundled in `fonts/` with its license, `fonts/OFL.txt`, which must ship with it.

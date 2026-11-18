@@ -10,11 +10,14 @@
   const bgOf = (el) => { const L = []; for (let n = el; n && n.nodeType === 1; n = up(n)) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0) { L.push(c); if (c.a >= 1) break; } } let o = { r: 255, g: 255, b: 255, a: 1 }; for (let i = L.length - 1; i >= 0; i--) o = blend(L[i], o); return o; };
   const up = (n) => n.parentElement || n.parentNode?.host || null;
   const overMedia = (el) => { const r = el.getBoundingClientRect(), area = r.width * r.height; const covers = (m) => { if (m === el || m.contains(el) || el.contains(m)) return false; const q = m.getBoundingClientRect(); const w = Math.min(r.right, q.right) - Math.max(r.left, q.left), h = Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top); return w > 0 && h > 0 && w * h >= 0.5 * area; }; for (let a = el; a && a.nodeType === 1; a = up(a)) { const cs = getComputedStyle(a); if (cs.backgroundImage !== 'none') return true; for (const m of a.querySelectorAll('img, video, canvas')) if (covers(m)) return true; if ((parse(cs.backgroundColor)?.a || 0) >= 1) return false; } return false; };
-  const name = (el) => el.tagName.toLowerCase() + (el.id ? '#' + el.id : typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/)[0] : '');
+  // id and class are page-controlled and end up in copied CSS: escaped, `id="x{} body{…}"` can't break out of the selector
+  const name = (el) => el.tagName.toLowerCase() + (el.id ? '#' + CSS.escape(el.id) : typeof el.className === 'string' && el.className.trim() ? '.' + CSS.escape(el.className.trim().split(/\s+/)[0]) : '');
   const px = (v) => Math.round(parseFloat(v) * 10) / 10;
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-  const host = document.createElement('lupax-root');
+  // a plain div: a custom tag could be defined by the page first and upgraded with the page's own code
+  const host = document.createElement('div');
+  host.dataset.lupaxInspector = '';
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483646;pointer-events:none';
   const sh = host.attachShadow({ mode: 'closed' });
   sh.innerHTML = `<style>

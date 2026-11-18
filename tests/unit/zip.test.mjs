@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { makeZip, assetZipPath } from '../../lib/zip.js';
+import { makeZip, assetZipPath, safeAssetName } from '../../lib/zip.js';
 
 const enc = new TextEncoder();
 
@@ -75,7 +75,20 @@ test('assetZipPath sorts by type, adds a missing extension and strips path parts
   assert.equal(assetZipPath({ name: 'logo', type: 'svg', format: 'svg' }), 'svgs/logo.svg');
   assert.equal(assetZipPath({ name: 'Inter', type: 'font' }), 'fonts/Inter.bin');
   assert.equal(assetZipPath({ name: 'x.gif', type: 'weird' }), 'other/x.gif');
-  assert.equal(assetZipPath({ name: '../../etc/passwd', type: 'image', format: 'txt' }), 'images/_.._etc_passwd');
+  assert.equal(assetZipPath({ name: '../../etc/passwd', type: 'image', format: 'txt' }), 'images/____etc_passwd.bin');
   assert.equal(assetZipPath({ name: '..\\..\\a.png', type: 'image' }), 'images/_.._a.png');
   assert.equal(assetZipPath({ name: '', type: 'icon', format: 'ico' }), 'icons/asset.ico');
+});
+
+test('safeAssetName never yields a program, a hidden extension or a reserved name', () => {
+  // U+202E (right-to-left override) would display "invoice\u202Egpj.exe" as "invoiceexe.jpg"
+  assert.equal(safeAssetName({ name: 'invoice\u202Egpj.exe', type: 'image', format: 'exe' }), 'invoicegpj_exe.bin');
+  assert.equal(safeAssetName({ name: 'setup.exe', type: 'image', format: 'png' }), 'setup_exe.png');
+  assert.equal(safeAssetName({ name: 'run.lnk', type: 'font' }), 'run_lnk.bin');
+  assert.equal(safeAssetName({ name: 'tool.hta', type: 'weird' }), 'tool_hta.bin');
+  assert.equal(safeAssetName({ name: 'a\u0000b\u200Fc.PNG', type: 'image' }), 'abc.png');
+  assert.equal(safeAssetName({ name: 'con.png', type: 'image' }), '_con.png');
+  assert.equal(safeAssetName({ name: 'logo.svg ...', type: 'svg' }), 'logo.svg');
+  assert.equal(safeAssetName({ name: `${'x'.repeat(300)}.woff2`, type: 'font' }), `${'x'.repeat(100)}.woff2`);
+  assert.equal(safeAssetName({ name: 'Inter.woff2', type: 'font' }), 'Inter.woff2');
 });

@@ -247,7 +247,7 @@ test('accessibility scan: text over images, hidden content and svg titles are no
 
   // the in-page inspector uses the same rule for the photo heading
   await send({ type: 'inspect', on: true });
-  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  await waitFor(() => site.evaluate('!!document.querySelector("[data-lupax-inspector]")'), { label: 'inspector overlay' });
   const h = await site.evaluate(`(() => { const r = document.querySelector('.hero h2').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; })()`);
   await site.click(h.x, h.y); // pin it: the panel opens
   // the panel lives in a closed shadow root; CDP can still read it
@@ -298,7 +298,7 @@ test('web components: scans, "Show on page" and the inspector reach into open sh
 
   // inspector: hover hits the element inside the component, and ↑ climbs out to the host
   await send({ type: 'inspect', on: true });
-  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  await waitFor(() => site.evaluate('!!document.querySelector("[data-lupax-inspector]")'), { label: 'inspector overlay' });
   const pt = await site.evaluate(`(() => { const r = document.querySelector('x-card').shadowRoot.querySelector('.inside-shadow').getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; })()`);
   await site.click(pt.x, pt.y);
   const panel = async () => JSON.stringify(await site.send('DOM.getDocument', { depth: -1, pierce: true }));
@@ -561,15 +561,15 @@ test('element capture captures the clicked element', async () => {
 test('inspect mode adds and removes its overlay', async () => {
   await freshSite();
   await send({ type: 'inspect', on: true });
-  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  await waitFor(() => site.evaluate('!!document.querySelector("[data-lupax-inspector]")'), { label: 'inspector overlay' });
   await send({ type: 'inspect', on: false });
-  await waitFor(() => site.evaluate('!document.querySelector("lupax-root")'), { label: 'overlay removed' });
+  await waitFor(() => site.evaluate('!document.querySelector("[data-lupax-inspector]")'), { label: 'overlay removed' });
 });
 
 test('inspector leaves no trace a page can see: no font added to the page, no extension files exposed', async () => {
   await freshSite();
   await send({ type: 'inspect', on: true });
-  await waitFor(() => site.evaluate('!!document.querySelector("lupax-root")'), { label: 'inspector overlay' });
+  await waitFor(() => site.evaluate('!!document.querySelector("[data-lupax-inspector]")'), { label: 'inspector overlay' });
   await sleep(500); // a font load would have finished by now
   const fams = await site.evaluate('[...document.fonts].map((f) => f.family).join(",")');
   assert.ok(!/jakarta/i.test(fams), `page font list gained: ${fams}`);
@@ -628,9 +628,13 @@ test('editor: crop is clamped, unsaved edits warn, IME Enter, and Save survives 
     assert.equal(await unloadBlocked(), false, 'no warning before any edit');
 
     // IME: Enter while composing must not commit the text box
+    // the text box commits on blur, which Chrome only fires in a focused page: when another tab or window of the
+    // test browser had focus, the box never got focus and plain Enter "didn't commit" (flaky in the full suite)
+    await ed.send('Emulation.setFocusEmulationEnabled', { enabled: true });
     await ed.evaluate(`document.querySelector('[data-tool=text]').click()`);
     await ed.click(r.x + r.w * 0.1, r.y + r.h * 0.1);
     await waitFor(() => ed.evaluate(`!!document.querySelector('.txt-in')`), { label: 'text box' });
+    await waitFor(() => ed.evaluate(`document.activeElement?.classList.contains('txt-in')`), { label: 'text box focused' });
     await ed.evaluate(`(() => { const el = document.querySelector('.txt-in'); el.textContent = 'にほん';
       el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true })); })()`);
     assert.equal(await ed.evaluate(`!!document.querySelector('.txt-in')`), true, 'IME Enter kept the text box open');
@@ -678,6 +682,14 @@ test('tab recording saves a WebM and streams chunks to IndexedDB while recording
   assert.ok(it.size > 1000);
   assert.ok(chunksWhileRecording >= 2, `expected chunks persisted during recording, got ${chunksWhileRecording}`);
   assert.equal(await db(`return db.countChunks()`), 0, 'chunks cleaned up after save');
+  // MediaRecorder leaves the duration out; the saved file must have one or players can't show its length or seek
+  const viewer = await b.attach((await b.waitForTarget((x) => x.url.includes(`viewer.html?id=${it.id}`))).targetId);
+  try {
+    const dur = await waitFor(() => viewer.evaluate(`(() => { const v = document.querySelector('video'); return v && v.readyState >= 1 ? v.duration : null; })()`), { label: 'video metadata' });
+    assert.ok(Number.isFinite(dur) && dur > 2 && dur < 10, `video has a seekable duration (got ${dur})`);
+  } finally {
+    await viewer.detach();
+  }
 });
 
 const recOpts = { source: 'tab', mic: false, webcam: false, systemAudio: true, cursor: false, countdown: 0, quality: '720', fps: 24 };
