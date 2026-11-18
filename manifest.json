@@ -1,8 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "LupaX",
+  "name": "LupaX — CSS Inspector & Screen Capture",
+  "short_name": "LupaX",
   "version": "1.0.0",
   "description": "Capture and inspect web pages: screenshots, recordings, CSS styles, assets and accessibility checks for designers and devs.",
+  "homepage_url": "https://lupax.app",
   "minimum_chrome_version": "116",
   "permissions": [
     "activeTab",
