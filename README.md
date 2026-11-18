@@ -4,9 +4,12 @@ Capture and inspect web pages in Chrome (Manifest V3): screenshots, recordings, 
 
 ## Load it
 
-1. Open `chrome://extensions`, enable **Developer mode**.
-2. **Load unpacked** → select this folder.
-3. Pin LupaX. Shortcuts: `chrome://extensions/shortcuts`.
+LupaX will be on the Chrome Web Store. To run it from source:
+
+1. `git clone https://github.com/danbaez/lupax.git`
+2. Open `chrome://extensions`, enable **Developer mode**.
+3. **Load unpacked** → select the `lupax` folder.
+4. Pin LupaX. Shortcuts: `chrome://extensions/shortcuts`.
 
 Requires Chrome 116+.
 
