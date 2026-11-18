@@ -10,7 +10,7 @@ import { makeZip } from '../lib/zip.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SHIP_DIRS = ['content/', 'fonts/', 'icons/', 'lib/', 'popup/', 'styles/'];
 const isShipped = (f) => !f.split('/').some((p) => p.startsWith('.'))
-  && (f === 'manifest.json' || /^[^/]+\.(html|js)$/.test(f) || SHIP_DIRS.some((d) => f.startsWith(d)));
+  && (['manifest.json', 'LICENSE', 'NOTICE'].includes(f) || /^[^/]+\.(html|js)$/.test(f) || SHIP_DIRS.some((d) => f.startsWith(d)));
 
 const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
 const files = tracked.filter(isShipped).filter((f) => existsSync(join(root, f))).sort();
@@ -24,8 +24,10 @@ if (missing.length) {
   console.error(`Not in the package (untracked or excluded): ${missing.join(', ')}`);
   process.exit(1);
 }
-if (!files.includes('fonts/OFL.txt')) {
-  console.error('fonts/OFL.txt is missing: the bundled font\'s license must ship with it');
+// license files that must ship: Apache-2.0 requires LICENSE and NOTICE in redistributions, OFL requires its text
+const required = ['LICENSE', 'NOTICE', 'fonts/OFL.txt'].filter((f) => !files.includes(f));
+if (required.length) {
+  console.error(`License files missing from the package (untracked?): ${required.join(', ')}`);
   process.exit(1);
 }
 

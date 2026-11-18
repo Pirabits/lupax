@@ -65,6 +65,12 @@ Layout:
 | `popup/tokens.js` | Design-token export (JSON / CSS / Tailwind) |
 | `lib/` | Shared modules; `lib/scan.js` holds functions injected into pages, which must stay self-contained (their copied WCAG math is pinned by `tests/unit/wcag-parity.test.mjs`) |
 
-`npm run package` builds the Web Store upload, `dist/lupax-<version>.zip`: the git-tracked extension files only (no `tests/`, `scripts/`, `docs/`, `package.json` or `README.md`), with `manifest.json` at the root. Bump `version` in `manifest.json` before each upload. The privacy policy linked from the store listing is `docs/privacy.html` (GitHub Pages, `/docs` folder).
+`npm run package` builds the Web Store upload, `dist/lupax-<version>.zip`: the git-tracked extension files only (no `tests/`, `scripts/`, `docs/`, `package.json` or `README.md`) plus `LICENSE` and `NOTICE`, with `manifest.json` at the root. Bump `version` in `manifest.json` before each upload. The website, [lupax.app](https://lupax.app), is the `docs/` folder served by GitHub Pages from `main`: `docs/index.html` (landing page) and `docs/privacy.html` (the privacy policy linked from the store listing). It loads nothing from other servers; its font and icons are copied into `docs/assets/`.
 
 Font: Plus Jakarta Sans (SIL Open Font License 1.1), bundled in `fonts/` with its license, `fonts/OFL.txt`, which must ship with it.
+
+## License & trademarks
+
+Copyright 2026 Pirabits LLC. The code is licensed under the [Apache License 2.0](LICENSE): you can use, modify and redistribute it, including commercially, as long as you keep the copyright notices and the [NOTICE](NOTICE) file.
+
+The license covers the code, not the brand. "LupaX", the LupaX logo and icons are trademarks of Pirabits LLC and are not licensed for use in other products: a fork must use its own name and icons. See [TRADEMARKS.md](TRADEMARKS.md).
