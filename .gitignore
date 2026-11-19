@@ -3,3 +3,6 @@ node_modules/
 *.zip
 dist/
 .env*
+docs/.taste-skill/
+docs/shots/
+docs/names.json

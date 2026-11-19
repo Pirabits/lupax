@@ -68,7 +68,7 @@ Layout:
 | `popup/tokens.js` | Design-token export (JSON / CSS / Tailwind) |
 | `lib/` | Shared modules; `lib/scan.js` holds functions injected into pages, which must stay self-contained (their copied WCAG math is pinned by `tests/unit/wcag-parity.test.mjs`) |
 
-`npm run package` builds the Web Store upload, `dist/lupax-<version>.zip`: the git-tracked extension files only (no `tests/`, `scripts/`, `docs/`, `package.json` or `README.md`) plus `LICENSE` and `NOTICE`, with `manifest.json` at the root. Bump `version` in `manifest.json` before each upload. The website, [lupax.app](https://lupax.app), is the `docs/` folder served by GitHub Pages from `main`: `docs/index.html` (landing page) and `docs/privacy.html` (the privacy policy linked from the store listing). It loads nothing from other servers; its font and icons are copied into `docs/assets/`.
+`npm run package` builds the Web Store upload, `dist/lupax-<version>.zip`: the git-tracked extension files only (no `tests/`, `scripts/`, `docs/`, `package.json` or `README.md`) plus `LICENSE` and `NOTICE`, with `manifest.json` at the root. Bump `version` in `manifest.json` before each upload. The website, [lupax.app](https://lupax.app), is the `docs/` folder served by GitHub Pages from `main`: `docs/index.html` (landing page) and `docs/privacy.html` (the privacy policy linked from the store listing). It loads nothing from other servers: its fonts (Reddit Sans and JetBrains Mono, SIL OFL 1.1, `docs/assets/OFL.txt`), icons and scripts are copied into `docs/assets/`.
 
 Font: Plus Jakarta Sans (SIL Open Font License 1.1), bundled in `fonts/` with its license, `fonts/OFL.txt`, which must ship with it.
 
