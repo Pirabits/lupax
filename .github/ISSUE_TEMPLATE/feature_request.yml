@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest something LupaX should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The job you have in mind, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you'd like LupaX to do
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you use instead today
+      description: Another tool, a workaround, or nothing.
+  - type: markdown
+    attributes:
+      value: |
+        LupaX keeps everything on your computer and adds no accounts or servers, so ideas that need them are unlikely to be accepted.

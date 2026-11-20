@@ -72,6 +72,10 @@ Layout:
 
 Font: Plus Jakarta Sans (SIL Open Font License 1.1), bundled in `fonts/` with its license, `fonts/OFL.txt`, which must ship with it.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Report security problems as [SECURITY.md](SECURITY.md) describes.
+
 ## License & trademarks
 
 Copyright 2026 Pirabits LLC. The code is licensed under the [Apache License 2.0](LICENSE): you can use, modify and redistribute it, including commercially, as long as you keep the copyright notices and the [NOTICE](NOTICE) file.

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/Pirabits/lupax/security/advisories/new
+    about: Report vulnerabilities privately, not in a public issue.
+  - name: Email support
+    url: mailto:support@lupax.app
+    about: Questions that aren't a bug or a feature request.
