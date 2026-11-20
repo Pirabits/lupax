@@ -277,6 +277,10 @@
   #install ol { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: var(--s-4); }
   #install ol li b { font-family: var(--font-mono); font-weight: 500; color: var(--accent); margin-right: var(--s-2); }
   #install code { font: 15px var(--font-mono); background: color-mix(in oklab, var(--ink) 8%, transparent); padding: 1px 6px; border-radius: 4px; }
+  .lx-shots figure { margin: 0; display: grid; gap: var(--s-4); align-content: start; }
+  .lx-shots img { width: 100%; border: 1px solid var(--line); border-radius: var(--r-md); }
+  @media (min-width: 1024px) { .lx-shots__main { grid-row: span 2; } }
+  .lx-shots figcaption { font-size: var(--t-small); line-height: 1.45; color: var(--muted); }
   .lx-store { display: flex; align-items: center; gap: var(--s-4); padding-block: var(--s-5); border-block: 1px solid var(--line); }
   .lx-store img { flex: none; }
   .lx-store p { margin: 0; }
@@ -307,7 +311,7 @@
     </nav>
     <div class="nav__actions">
       <a class="nav__link" href="https://github.com/danbaez/lupax">GitHub</a>
-      <a class="btn btn--primary" href="#install">Get LupaX</a>
+      <a class="btn btn--primary" href="https://chromewebstore.google.com/detail/lupax-%E2%80%94-css-inspector-scr/hbbpbgakpjkikhgmmabnpmgikfjlhihj">Get LupaX</a>
     </div>
     <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu">
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -322,10 +326,10 @@
         <h1 id="hero-h">Free CSS inspector and screen capture for Chrome</h1>
         <p class="hero__lead">Hover any element to read its CSS, capture or record the screen, check accessibility and export a page's design tokens. Open source under Apache-2.0, with no account.</p>
         <div class="btn-row">
-          <a class="btn btn--primary" href="#install">Get LupaX<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+          <a class="btn btn--primary" href="https://chromewebstore.google.com/detail/lupax-%E2%80%94-css-inspector-scr/hbbpbgakpjkikhgmmabnpmgikfjlhihj">Get LupaX<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
           <a class="btn btn--secondary" href="https://github.com/danbaez/lupax">See the source code</a>
         </div>
-        <p class="hero__proof">Needs Chrome 116 or later. The Chrome Web Store listing is coming soon.</p>
+        <p class="hero__proof">Free on the Chrome Web Store. Needs Chrome 116 or later.</p>
         <dl class="hero__facts lx-hfacts">
           <div><dt>Price</dt><dd>Free, every feature</dd></div>
           <div><dt>Captures</dt><dd>PNG, JPG, PDF</dd></div>
@@ -369,6 +373,21 @@
         </div>
       </div>
     </div></div>
+  </section>
+
+  <!-- screens: three captures from the Chrome Web Store listing, the real extension on the Pellmore sample -->
+  <section class="section" id="screens" style="--hm: 2" aria-labelledby="screens-h">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="screens-h">LupaX in Chrome</h2>
+        <p>The same screens you get after installing, from the Chrome Web Store listing.</p>
+      </div>
+      <div class="grid lx-shots">
+        <figure class="span-8 lx-shots__main"><img loading="lazy" src="assets/shots/inspector.jpg" alt="The LupaX inspector panel beside a selected button, showing its size, colors, typography, contrast and box model" width="1280" height="680"><figcaption>The inspector panel: click any element to see its CSS, spacing and contrast.</figcaption></figure>
+        <figure class="span-4"><img loading="lazy" src="assets/shots/style-inspector.jpg" alt="The LupaX Style Inspector listing a page's color palette with instance counts, ready to export as tokens" width="1280" height="680"><figcaption>The Style Inspector: every color and font on the page, exported as tokens.</figcaption></figure>
+        <figure class="span-4"><img loading="lazy" src="assets/shots/report.jpg" alt="The LupaX accessibility report with a 90% score, missing alt text and contrast issues, each pointing to its element" width="1280" height="680"><figcaption>The accessibility report: WCAG checks that point to the exact element to fix.</figcaption></figure>
+      </div>
+    </div>
   </section>
 
   <!-- app-frame: LupaX's style scan of the sample page beside the tokens it exports (built from the extension's own
@@ -607,8 +626,8 @@
         <div class="span-5 stack-5">
           <h2 id="install-h">Install LupaX in Chrome</h2>
           <div class="lx-store">
-            <p>The Chrome Web Store listing, with automatic updates, is coming soon. Until then, load LupaX from its source in about a minute.</p>
-            <img loading="lazy" class="ic ic-40" src="assets/icons/chrome.svg" alt="" width="40" height="40">
+            <p>Add LupaX from the Chrome Web Store and Chrome keeps it up to date. To run it from source instead, it takes about a minute.</p>
+            <a href="https://chromewebstore.google.com/detail/lupax-%E2%80%94-css-inspector-scr/hbbpbgakpjkikhgmmabnpmgikfjlhihj"><img loading="lazy" src="assets/chrome-web-store-badge.png" alt="Available in the Chrome Web Store" width="248" height="75"></a>
           </div>
           <ol>
             <li><b>1</b>Clone the repository from GitHub.</li>
@@ -670,7 +689,7 @@
     <div class="closing__cta close--word">
       <div class="section-head--split">
         <div><h2 id="close-h">Get LupaX for Chrome</h2><p class="t-lead">Free and open source. Needs Chrome 116 or later.</p></div>
-        <a class="btn btn--primary" href="#install">Get LupaX<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+        <a class="btn btn--primary" href="https://chromewebstore.google.com/detail/lupax-%E2%80%94-css-inspector-scr/hbbpbgakpjkikhgmmabnpmgikfjlhihj">Get LupaX<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
       </div>
       <p class="close__word" aria-hidden="true">Lupa<span>X</span></p>
     </div>
@@ -680,7 +699,7 @@
           <p class="footer__lede">A CSS inspector and screen capture extension for Chrome.</p>
         </div>
         <div class="span-2 footer__col"><h3>Product</h3><ul><li><a href="#styles">Styles</a></li><li><a href="#capture">Capture</a></li><li><a href="#audit">Audit</a></li></ul></div>
-        <div class="span-2 footer__col"><h3>Install</h3><ul><li><a href="#install">From source</a></li><li><a href="#faq">Questions</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>Install</h3><ul><li><a href="https://chromewebstore.google.com/detail/lupax-%E2%80%94-css-inspector-scr/hbbpbgakpjkikhgmmabnpmgikfjlhihj">Chrome Web Store</a></li><li><a href="#install">From source</a></li><li><a href="#faq">Questions</a></li></ul></div>
         <div class="span-2 footer__col"><h3>Project</h3><ul><li><a href="https://github.com/danbaez/lupax">GitHub</a></li><li><a href="https://github.com/danbaez/lupax/blob/main/LICENSE">License</a></li></ul></div>
         <div class="span-2 footer__col"><h3>Support</h3><ul><li><a href="https://github.com/danbaez/lupax/issues">Report a bug</a></li><li><a href="mailto:support@lupax.app">Email support</a></li></ul></div>
       </div>
