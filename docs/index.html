@@ -277,6 +277,10 @@
   #install ol { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: var(--s-4); }
   #install ol li b { font-family: var(--font-mono); font-weight: 500; color: var(--accent); margin-right: var(--s-2); }
   #install code { font: 15px var(--font-mono); background: color-mix(in oklab, var(--ink) 8%, transparent); padding: 1px 6px; border-radius: 4px; }
+  .lx-shots figure { margin: 0; display: grid; gap: var(--s-4); align-content: start; }
+  .lx-shots img { width: 100%; border: 1px solid var(--line); border-radius: var(--r-md); }
+  @media (min-width: 1024px) { .lx-shots__main { grid-row: span 2; } }
+  .lx-shots figcaption { font-size: var(--t-small); line-height: 1.45; color: var(--muted); }
   .lx-store { display: flex; align-items: center; gap: var(--s-4); padding-block: var(--s-5); border-block: 1px solid var(--line); }
   .lx-store img { flex: none; }
   .lx-store p { margin: 0; }
@@ -369,6 +373,21 @@
         </div>
       </div>
     </div></div>
+  </section>
+
+  <!-- screens: three captures from the Chrome Web Store listing, the real extension on the Pellmore sample -->
+  <section class="section" id="screens" style="--hm: 2" aria-labelledby="screens-h">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="screens-h">LupaX in Chrome</h2>
+        <p>The same screens you get after installing, from the Chrome Web Store listing.</p>
+      </div>
+      <div class="grid lx-shots">
+        <figure class="span-8 lx-shots__main"><img loading="lazy" src="assets/shots/inspector.jpg" alt="The LupaX inspector panel beside a selected button, showing its size, colors, typography, contrast and box model" width="1280" height="680"><figcaption>The inspector panel: click any element to see its CSS, spacing and contrast.</figcaption></figure>
+        <figure class="span-4"><img loading="lazy" src="assets/shots/style-inspector.jpg" alt="The LupaX Style Inspector listing a page's color palette with instance counts, ready to export as tokens" width="1280" height="680"><figcaption>The Style Inspector: every color and font on the page, exported as tokens.</figcaption></figure>
+        <figure class="span-4"><img loading="lazy" src="assets/shots/report.jpg" alt="The LupaX accessibility report with a 90% score, missing alt text and contrast issues, each pointing to its element" width="1280" height="680"><figcaption>The accessibility report: WCAG checks that point to the exact element to fix.</figcaption></figure>
+      </div>
+    </div>
   </section>
 
   <!-- app-frame: LupaX's style scan of the sample page beside the tokens it exports (built from the extension's own
