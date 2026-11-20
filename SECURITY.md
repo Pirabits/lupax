@@ -4,7 +4,7 @@
 
 Please report security problems privately, not in a public issue:
 
-- **GitHub:** use [Report a vulnerability](https://github.com/danbaez/lupax/security/advisories/new) on this repository's Security tab, or
+- **GitHub:** use [Report a vulnerability](https://github.com/Pirabits/lupax/security/advisories/new) on this repository's Security tab, or
 - **Email:** support@lupax.app, with "Security" in the subject.
 
 Include what you found, the steps to reproduce it and the Chrome version. You'll get a reply within 5 business days. Please give us a reasonable time to fix the problem before you disclose it publicly.

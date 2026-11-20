@@ -6,7 +6,7 @@ Capture and inspect web pages in Chrome (Manifest V3): screenshots, recordings, 
 
 Install LupaX from the [Chrome Web Store](https://chromewebstore.google.com/detail/lupax-%E2%80%94-css-inspector-scr/hbbpbgakpjkikhgmmabnpmgikfjlhihj). To run it from source:
 
-1. `git clone https://github.com/danbaez/lupax.git`
+1. `git clone https://github.com/Pirabits/lupax.git`
 2. Open `chrome://extensions`, enable **Developer mode**.
 3. **Load unpacked** → select the `lupax` folder.
 4. Pin LupaX. Shortcuts: `chrome://extensions/shortcuts`.
