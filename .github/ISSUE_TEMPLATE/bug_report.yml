@@ -1,0 +1,69 @@
+name: Bug report
+description: Something in LupaX doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security problems go through the [security policy](https://github.com/Pirabits/lupax/blob/main/SECURITY.md), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead. Include the error toast's text if there was one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open https://example.com
+        2. Click the LupaX icon, then Capture > Full page
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Feature
+      options:
+        - Inspect
+        - Styles and tokens
+        - Screenshot or editor
+        - Recording
+        - Assets and ZIP export
+        - Accessibility report
+        - History
+        - Settings
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: lupax-version
+    attributes:
+      label: LupaX version
+      description: Shown on the LupaX card at chrome://extensions.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: chrome-version
+    attributes:
+      label: Chrome version and operating system
+      description: Chrome's version is at chrome://version.
+      placeholder: "Chrome 131 on macOS 15"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed from
+      options:
+        - Chrome Web Store
+        - Source (Load unpacked)
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or other details
+      description: A public page where it happens helps most. Remove anything private from screenshots first.
